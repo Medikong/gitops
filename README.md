@@ -2,13 +2,16 @@
 
 이 repo는 준비된 Kubernetes 클러스터 위에서 MediKong 배포 선언과 운영 add-on을 관리하는 GitOps 전담 repo입니다.
 
-서비스 코드, 이미지 빌드, VM 생성, 서버 초기 bootstrap은 이 repo의 책임이 아닙니다. 여기서는 이미 만들어진 container image tag를 Kustomize overlay에 반영하고, Argo CD가 그 선언을 클러스터에 동기화하도록 관리합니다.
+서비스 코드, 이미지 빌드, VM 생성, 서버 초기 bootstrap은 이 repo의 책임이 아닙니다. 여기서는 이미 만들어진 container image tag를 배포 values에 반영하고, Argo CD가 그 선언을 클러스터에 동기화하도록 관리합니다.
 
 ## 책임 범위
 
 | 포함 | 설명 |
 | --- | --- |
 | `k8s/` | Kubernetes base, Kustomize overlay, namespace, storage, Kong, MetalLB, NetworkPolicy |
+| `charts/` | 서비스별 Helm release에 공통으로 쓰는 chart template |
+| `values/` | `base -> env -> service -> override` 순서로 합성하는 Helm values |
+| `platform/` | namespace, gateway, observability, policy처럼 서비스보다 먼저 준비되는 공통 기반 |
 | `argo/` | Argo CD Application과 설치 보조 스크립트 |
 | `cluster/ansible/` | 준비된 서버 위에서 Kubernetes cluster와 운영 add-on을 확인하거나 bootstrap하는 선별 playbook |
 | `cluster/scripts/` | MetalLB, local registry CA, image tag 갱신, Kubernetes 상태 확인 스크립트 |
@@ -29,9 +32,9 @@
 ## 기본 흐름
 
 1. service release pipeline이 container image를 만들고 registry에 게시합니다.
-2. 이 repo에서 image tag를 Kustomize overlay에 반영합니다.
-3. GitOps 검증 workflow가 Kustomize 렌더링과 manifest 보안 스캔을 실행합니다.
-4. Argo CD가 `Medikong/gitops`의 overlay 경로를 감시하고 클러스터에 동기화합니다.
+2. 이 repo에서 image tag를 서비스별 values 또는 기존 Kustomize overlay에 반영합니다.
+3. GitOps 검증 workflow가 Kustomize/Helm 렌더링과 manifest 보안 스캔을 실행합니다.
+4. Argo CD가 `Medikong/gitops`의 overlay 또는 Helm release 경로를 감시하고 클러스터에 동기화합니다.
 
 ## 자주 쓰는 명령
 
@@ -39,6 +42,10 @@
 make validate
 make render-local-all
 make render-aws-all
+make helm-lint
+make helm-template-patient-local
+make helm-template-patient-aws-dev
+make helm-template-patient-aws-prod
 make update-local-image-tags IMAGE_TAG=dev-001
 ```
 
@@ -65,6 +72,18 @@ gitops/
       gitops-validate.yml
       k8s-security-scan.yml
   argo/
+  charts/
+    medikong-service/
+  values/
+    base.yaml
+    env/
+    services/
+    overrides/
+  platform/
+    namespaces/
+    kong/
+    observability/
+    policies/
   k8s/
   cluster/
     ansible/
@@ -80,6 +99,9 @@ gitops/
 
 - `k8s/overlays/local/all`은 로컬 kubeadm 클러스터 전체 manifest 렌더링 entrypoint입니다.
 - `k8s/overlays/aws/all`은 AWS 배포 실험용 overlay entrypoint입니다.
+- `charts/medikong-service`는 서비스별 Helm release의 공통 chart입니다.
+- `values/services/patient.yaml`은 Helm 전환 pilot 서비스 values입니다.
+- Helm values는 `values/base.yaml`, `values/env/<env>.yaml`, `values/services/<service>.yaml`, `values/overrides/<env>/<service>.yaml` 순서로 합성합니다.
 - `cluster/ansible`에는 inventory를 포함하지 않습니다. inventory와 VM topology는 infra repo에서 준비한 값을 사용합니다.
 - `cluster/stacks/observability/install.sh`는 `cluster/stacks/observability` 디렉터리에서 실행합니다.
 - live cluster에 직접 적용하는 명령은 명시적으로 실행할 때만 사용합니다.

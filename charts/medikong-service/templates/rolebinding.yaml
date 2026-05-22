@@ -1,0 +1,19 @@
+{{- if and .Values.serviceAccount.create .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ default .Values.app.name .Values.serviceAccount.name | quote }}
+  namespace: {{ .Values.app.namespace | quote }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.app.name | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/part-of: medikong
+subjects:
+  - kind: ServiceAccount
+    name: {{ default .Values.app.name .Values.serviceAccount.name | quote }}
+    namespace: {{ .Values.app.namespace | quote }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ default .Values.app.name .Values.serviceAccount.name | quote }}
+{{- end }}

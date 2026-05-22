@@ -1,0 +1,49 @@
+app:
+  name: appointment-service
+  namespace: medical-appointment
+  labels:
+    medikong.io/service: appointment
+    medikong.io/tier: api
+
+image:
+  repository: appointment-service
+  tag: dev-appointment
+
+container:
+  port: 8082
+  env:
+    - name: DATABASE_URL
+      value: postgresql+psycopg://user:password@appointment-db:5432/appointment_db
+    - name: KAFKA_BOOTSTRAP_SERVERS
+      value: kafka.medical-messaging.svc.cluster.local:9092
+    - name: APPOINTMENT_CONFIRMED_TOPIC
+      value: appointment-confirmed
+
+service:
+  port: 8082
+  targetPort: http
+
+ingress:
+  enabled: true
+  name: appointment-api
+  className: kong
+  annotations:
+    konghq.com/plugins: medikong-jwt,medikong-identity-headers,medikong-rate-limit-appointments,medikong-correlation-id,medikong-prometheus
+  hosts:
+    - host: ""
+      paths:
+        - path: /appointments
+          pathType: Prefix
+
+networkPolicy:
+  enabled: true
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kong
+      ports:
+        - protocol: TCP
+          port: 8082

@@ -1,0 +1,47 @@
+app:
+  name: prescription-service
+  namespace: medical-prescription
+  labels:
+    medikong.io/service: prescription
+    medikong.io/tier: api
+
+image:
+  repository: prescription-service
+  tag: dev-prescription
+
+container:
+  port: 8083
+  env:
+    - name: DATABASE_URL
+      value: postgresql+psycopg://user:password@prescription-db:5432/prescription_db
+    - name: PATIENT_SERVICE_URL
+      value: http://patient-service.medical-patient.svc.cluster.local:8081
+
+service:
+  port: 8083
+  targetPort: http
+
+ingress:
+  enabled: true
+  name: prescription-api
+  className: kong
+  annotations:
+    konghq.com/plugins: medikong-jwt,medikong-identity-headers,medikong-rate-limit-prescriptions,medikong-correlation-id,medikong-prometheus
+  hosts:
+    - host: ""
+      paths:
+        - path: /prescriptions
+          pathType: Prefix
+
+networkPolicy:
+  enabled: true
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kong
+      ports:
+        - protocol: TCP
+          port: 8083

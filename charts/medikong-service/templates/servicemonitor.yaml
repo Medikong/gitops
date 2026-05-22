@@ -1,0 +1,25 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Values.app.name | quote }}
+  namespace: {{ .Values.app.namespace | quote }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.app.name | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/part-of: medikong
+{{- with .Values.serviceMonitor.labels }}
+{{ toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.app.name | quote }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.app.namespace | quote }}
+  endpoints:
+    - port: {{ .Values.serviceMonitor.port | quote }}
+      path: {{ .Values.serviceMonitor.path | quote }}
+      interval: {{ .Values.serviceMonitor.interval | quote }}
+{{- end }}

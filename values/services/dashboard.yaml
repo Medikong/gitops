@@ -1,0 +1,44 @@
+app:
+  name: dashboard
+  namespace: medical-dashboard
+  labels:
+    medikong.io/service: dashboard
+    medikong.io/tier: frontend
+
+image:
+  repository: dashboard
+  tag: dev-dashboard
+
+container:
+  port: 80
+  readinessProbe: null
+  livenessProbe: null
+
+service:
+  port: 80
+  targetPort: http
+
+ingress:
+  enabled: true
+  name: dashboard
+  className: kong
+  annotations:
+    konghq.com/plugins: medikong-correlation-id,medikong-prometheus
+  hosts:
+    - host: ""
+      paths:
+        - path: /
+          pathType: Prefix
+
+networkPolicy:
+  enabled: true
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kong
+      ports:
+        - protocol: TCP
+          port: 80

@@ -1,0 +1,55 @@
+app:
+  name: auth-service
+  namespace: medical-auth
+  labels:
+    medikong.io/service: auth
+    medikong.io/tier: api
+
+image:
+  repository: auth-service
+  tag: dev-auth
+
+container:
+  port: 8080
+  env:
+    - name: DATABASE_URL
+      value: postgresql+psycopg://user:password@auth-db:5432/auth_db
+    - name: AUTH_TOKEN_TTL_SECONDS
+      value: "900"
+    - name: AUTH_REFRESH_TOKEN_TTL_SECONDS
+      value: "604800"
+    - name: STAFF_JWT_SECRET
+      value: staff-secret
+    - name: PATIENT_JWT_SECRET
+      value: patient-secret
+    - name: DOCTOR_JWT_SECRET
+      value: doctor-secret
+
+service:
+  port: 8080
+  targetPort: http
+
+ingress:
+  enabled: true
+  name: auth-api
+  className: kong
+  annotations:
+    konghq.com/plugins: medikong-correlation-id,medikong-prometheus
+  hosts:
+    - host: ""
+      paths:
+        - path: /auth
+          pathType: Prefix
+
+networkPolicy:
+  enabled: true
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kong
+      ports:
+        - protocol: TCP
+          port: 8080

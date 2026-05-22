@@ -1,0 +1,23 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "allow-%s-ingress" .Values.app.name | quote }}
+  namespace: {{ .Values.app.namespace | quote }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.app.name | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/part-of: medikong
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ .Values.app.name | quote }}
+  policyTypes:
+{{ toYaml .Values.networkPolicy.policyTypes | nindent 4 }}
+{{- with .Values.networkPolicy.ingress }}
+  ingress:
+{{ toYaml . | nindent 4 }}
+{{- else }}
+  ingress: []
+{{- end }}
+{{- end }}

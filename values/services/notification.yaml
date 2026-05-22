@@ -1,0 +1,49 @@
+app:
+  name: notification-service
+  namespace: medical-notification
+  labels:
+    medikong.io/service: notification
+    medikong.io/tier: api
+
+image:
+  repository: notification-service
+  tag: dev-notification
+
+container:
+  port: 8084
+  env:
+    - name: DATABASE_URL
+      value: postgresql+psycopg://user:password@notification-db:5432/notification_db
+    - name: KAFKA_BOOTSTRAP_SERVERS
+      value: kafka.medical-messaging.svc.cluster.local:9092
+    - name: APPOINTMENT_CONFIRMED_TOPIC
+      value: appointment-confirmed
+
+service:
+  port: 8084
+  targetPort: http
+
+ingress:
+  enabled: true
+  name: notification-api
+  className: kong
+  annotations:
+    konghq.com/plugins: medikong-jwt,medikong-identity-headers,medikong-rate-limit-notifications,medikong-correlation-id,medikong-prometheus
+  hosts:
+    - host: ""
+      paths:
+        - path: /notifications
+          pathType: Prefix
+
+networkPolicy:
+  enabled: true
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kong
+      ports:
+        - protocol: TCP
+          port: 8084

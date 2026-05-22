@@ -1,0 +1,26 @@
+environment: local
+
+image:
+  registry: 10.10.10.10:5000
+  pullPolicy: IfNotPresent
+
+deployment:
+  replicas: 1
+
+container:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+pdb:
+  enabled: false
+
+hpa:
+  enabled: false
+
+serviceMonitor:
+  enabled: false
