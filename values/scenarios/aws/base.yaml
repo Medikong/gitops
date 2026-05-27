@@ -1,11 +1,16 @@
-environment: local
+environment: aws-scenario
 
 image:
-  registry: 10.10.10.10:5000
-  pullPolicy: IfNotPresent
+  registry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: ecr-registry
 
 deployment:
   replicas: 1
+  podLabels:
+    medikong.io/scenario: "true"
 
 container:
   resources:

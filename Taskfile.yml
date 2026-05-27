@@ -1,0 +1,520 @@
+version: "3"
+
+vars:
+  HELM: '{{default "helm" .HELM}}'
+  KUBECTL: '{{default "kubectl" .KUBECTL}}'
+  SERVICE_CHART: '{{default "charts/medikong-service" .SERVICE_CHART}}'
+  VALUES_BASE: '{{default "values/base.yaml" .VALUES_BASE}}'
+  ENVIRONMENTS: local-docker-desktop-kubeadm local-docker-desktop-kind local-vm-kubeadm aws-dev aws-prod
+  AWS_SCENARIOS: network hpa storage release
+  LOCAL_DOCKER_DESKTOP_ENV: local-docker-desktop-kubeadm
+  LOCAL_DOCKER_DESKTOP_RELEASE_SUFFIX: local-docker-desktop
+  SERVICE_REPO: '{{default "../service" .SERVICE_REPO}}'
+  DEV_REGISTRY: '{{default "localhost:5001" .DEV_REGISTRY}}'
+  DEV_REGISTRY_CONTAINER: '{{default "medikong-registry" .DEV_REGISTRY_CONTAINER}}'
+  DEV_IMAGE_NAMESPACE: '{{default "" .DEV_IMAGE_NAMESPACE}}'
+  DEV_IMAGE_TAG: '{{default "dev" .DEV_IMAGE_TAG}}'
+  KONG_CHART: '{{default "kong/kong" .KONG_CHART}}'
+  KONG_CHART_VERSION: '{{default "3.2.0" .KONG_CHART_VERSION}}'
+  KONG_NAMESPACE: '{{default "kong" .KONG_NAMESPACE}}'
+  KONG_RELEASE: '{{default "kong" .KONG_RELEASE}}'
+  KONG_VALUES: '{{default "platform/kong/values-local.yaml" .KONG_VALUES}}'
+  KONG_PROXY_SERVICE: '{{default "kong-kong-proxy" .KONG_PROXY_SERVICE}}'
+  AWS_ARGO_ROOT: '{{default "argo/applications/aws-dev/root.yaml" .AWS_ARGO_ROOT}}'
+
+tasks:
+  default:
+    desc: 사용 가능한 GitOps 작업을 표시합니다.
+    cmds:
+      - task --list
+
+  validate:
+    desc: Helm lint, 모든 서비스/환경 render, scenario render, platform render, Argo 문법 검사를 실행합니다.
+    deps:
+      - helm:lint
+      - helm:template:all
+      - scenario:all
+      - platform:render
+      - kong:render
+      - argo:validate
+
+  render:
+    deps:
+      - helm:template:all
+      - platform:render
+
+  dev:
+    desc: service image build/push 후 Docker Desktop Kubernetes에 모든 서비스 Helm release를 배포합니다.
+    cmds:
+      - task dev:check
+      - task dev:images
+      - '{{.KUBECTL}} apply -k platform/namespaces'
+      - task dev:data
+      - task dev:kong
+      - |
+        set -eu
+        image_registry='{{.DEV_REGISTRY}}'
+        image_namespace='{{.DEV_IMAGE_NAMESPACE}}'
+        if [ -n "${image_namespace}" ]; then
+          image_registry="${image_registry%/}/${image_namespace#/}"
+        fi
+        for service_file in values/services/*.yaml; do
+          service="$(basename "${service_file}" .yaml)"
+          namespace="$(ruby -ryaml -e 'puts YAML.load_file(ARGV[0]).fetch("app").fetch("namespace")' "${service_file}")"
+          app_name="$(ruby -ryaml -e 'puts YAML.load_file(ARGV[0]).fetch("app").fetch("name")' "${service_file}")"
+          release="${service}-{{.LOCAL_DOCKER_DESKTOP_RELEASE_SUFFIX}}"
+          {{.HELM}} upgrade --install "${release}" {{.SERVICE_CHART}} \
+            --namespace "${namespace}" \
+            --create-namespace \
+            -f {{.VALUES_BASE}} \
+            -f values/env/{{.LOCAL_DOCKER_DESKTOP_ENV}}.yaml \
+            -f "${service_file}" \
+            --set-string image.registry="${image_registry}" \
+            --set-string image.tag="{{.DEV_IMAGE_TAG}}" \
+            --set-string image.pullPolicy=Always
+          {{.KUBECTL}} rollout restart "deployment/${app_name}" -n "${namespace}"
+          {{.KUBECTL}} rollout status "deployment/${app_name}" -n "${namespace}" --timeout=180s
+        done
+
+  dev:check:
+    desc: Docker Desktop Kubernetes에 올릴 서비스 Helm release와 dev image override를 검증합니다.
+    cmds:
+      - task helm:lint
+      - task platform:render
+      - task dev:kong:check
+      - task helm:template:env ENV={{.LOCAL_DOCKER_DESKTOP_ENV}}
+      - |
+        set -eu
+        image_registry='{{.DEV_REGISTRY}}'
+        image_namespace='{{.DEV_IMAGE_NAMESPACE}}'
+        if [ -n "${image_namespace}" ]; then
+          image_registry="${image_registry%/}/${image_namespace#/}"
+        fi
+        for service_file in values/services/*.yaml; do
+          service="$(basename "${service_file}" .yaml)"
+          {{.HELM}} template "${service}-{{.LOCAL_DOCKER_DESKTOP_ENV}}-dev" {{.SERVICE_CHART}} \
+            -f {{.VALUES_BASE}} \
+            -f values/env/{{.LOCAL_DOCKER_DESKTOP_ENV}}.yaml \
+            -f "${service_file}" \
+            --set-string image.registry="${image_registry}" \
+            --set-string image.tag="{{.DEV_IMAGE_TAG}}" \
+            --set-string image.pullPolicy=Always >/dev/null
+        done
+
+  dev:registry:
+    desc: Docker Desktop dev registry를 준비하고 kindest-node containerd mirror를 설정합니다.
+    cmds:
+      - |
+        set -eu
+        registry='{{.DEV_REGISTRY}}'
+        container='{{.DEV_REGISTRY_CONTAINER}}'
+        case "${registry}" in
+          localhost:*|127.0.0.1:*) ;;
+          *)
+            printf 'DEV_REGISTRY=%s is not a local Docker Desktop registry; skipping local registry bootstrap.\n' "${registry}"
+            exit 0
+            ;;
+        esac
+        if ! command -v docker >/dev/null 2>&1; then
+          printf '%s\n' 'docker command is required for task dev:registry.' >&2
+          exit 2
+        fi
+        host_port="${registry##*:}"
+        if [ "${host_port}" = "${registry}" ]; then
+          host_port=5000
+        fi
+        if docker inspect "${container}" >/dev/null 2>&1; then
+          if ! docker inspect "${container}" | ruby -rjson -e 'data = JSON.parse(STDIN.read); exit(data[0].fetch("State").fetch("Running") ? 0 : 1)'; then
+            docker start "${container}" >/dev/null
+          fi
+        else
+          docker run -d --restart=always -p "127.0.0.1:${host_port}:5000" --name "${container}" registry:2 >/dev/null
+        fi
+        nodes="$(docker ps -q | while read -r id; do image="$(docker inspect "${id}" | ruby -rjson -e 'data = JSON.parse(STDIN.read); puts data[0].fetch("Config").fetch("Image")')"; case "${image}" in kindest/node:*) printf '%s\n' "${id}" ;; esac; done)"
+        if [ -z "${nodes}" ]; then
+          printf '%s\n' 'No kindest/node containers found. Registry is running, but no node mirror was configured.'
+          task dev:registry:check
+          exit 0
+        fi
+        for node in ${nodes}; do
+          network="$(docker inspect "${node}" | ruby -rjson -e 'data = JSON.parse(STDIN.read); puts data[0].fetch("NetworkSettings").fetch("Networks").keys.first')"
+          if [ -z "${network}" ]; then
+            printf 'Could not resolve Docker network for node container %s.\n' "${node}" >&2
+            exit 2
+          fi
+          if ! docker inspect "${container}" | ruby -rjson -e 'data = JSON.parse(STDIN.read); network = ARGV.fetch(0); exit(data[0].fetch("NetworkSettings").fetch("Networks").key?(network) ? 0 : 1)' "${network}"; then
+            docker network connect "${network}" "${container}"
+          fi
+          docker exec "${node}" sh -c "mkdir -p '/etc/containerd/certs.d/${registry}' && printf '%s\n' 'server = \"http://${registry}\"' '' '[host.\"http://${container}:5000\"]' '  capabilities = [\"pull\", \"resolve\"]' > '/etc/containerd/certs.d/${registry}/hosts.toml' && systemctl restart containerd"
+        done
+        task dev:registry:check
+
+  dev:registry:check:
+    desc: Docker Desktop dev registry와 kindest-node mirror 설정을 확인합니다.
+    cmds:
+      - |
+        set -eu
+        registry='{{.DEV_REGISTRY}}'
+        case "${registry}" in
+          localhost:*|127.0.0.1:*) ;;
+          *)
+            printf 'DEV_REGISTRY=%s is not a local Docker Desktop registry; skipping local registry check.\n' "${registry}"
+            exit 0
+            ;;
+        esac
+        for attempt in 1 2 3 4 5; do
+          if curl -fsS "http://${registry}/v2/" >/dev/null; then
+            break
+          fi
+          if [ "${attempt}" = "5" ]; then
+            printf 'Docker Desktop dev registry is not reachable: http://%s/v2/\n' "${registry}" >&2
+            exit 2
+          fi
+          sleep 1
+        done
+        nodes="$(docker ps -q | while read -r id; do image="$(docker inspect "${id}" | ruby -rjson -e 'data = JSON.parse(STDIN.read); puts data[0].fetch("Config").fetch("Image")')"; case "${image}" in kindest/node:*) printf '%s\n' "${id}" ;; esac; done)"
+        if [ -z "${nodes}" ]; then
+          printf '%s\n' 'Registry API is reachable; no kindest/node containers were found to check.'
+          exit 0
+        fi
+        for node in ${nodes}; do
+          docker exec "${node}" test -f "/etc/containerd/certs.d/${registry}/hosts.toml"
+        done
+
+  dev:images:
+    desc: service repo의 공개 Makefile 명령으로 Docker Desktop dev image를 build/push합니다.
+    cmds:
+      - task dev:registry
+      - |
+        set -eu
+        service_repo='{{.SERVICE_REPO}}'
+        if [ ! -d "${service_repo}" ]; then
+          printf 'SERVICE_REPO does not exist: %s\n' "${service_repo}" >&2
+          exit 2
+        fi
+        if [ ! -f "${service_repo}/Makefile" ]; then
+          printf 'SERVICE_REPO has no Makefile: %s\n' "${service_repo}" >&2
+          exit 2
+        fi
+        for target in app-images-build app-images-push; do
+          if ! make -C "${service_repo}" -n "${target}" \
+            IMAGE_REGISTRY="{{.DEV_REGISTRY}}" \
+            IMAGE_NAMESPACE="{{.DEV_IMAGE_NAMESPACE}}" \
+            IMAGE_TAG="{{.DEV_IMAGE_TAG}}" >/dev/null 2>&1; then
+            printf 'SERVICE_REPO Makefile is missing required target: %s\n' "${target}" >&2
+            exit 2
+          fi
+        done
+        make -C "${service_repo}" app-images-push \
+          IMAGE_REGISTRY="{{.DEV_REGISTRY}}" \
+          IMAGE_NAMESPACE="{{.DEV_IMAGE_NAMESPACE}}" \
+          IMAGE_TAG="{{.DEV_IMAGE_TAG}}"
+
+  dev:data:
+    desc: Docker Desktop dev에 필요한 DB와 Kafka를 배포하고 준비될 때까지 기다립니다.
+    cmds:
+      - |
+        set -eu
+        {{.KUBECTL}} delete job/kafka-create-topics -n medical-messaging --ignore-not-found=true
+        {{.KUBECTL}} apply -k platform/data
+        for item in \
+          medical-auth/auth-db \
+          medical-patient/patient-db \
+          medical-appointment/appointment-db \
+          medical-prescription/prescription-db \
+          medical-notification/notification-db \
+          medical-messaging/kafka
+        do
+          namespace="${item%%/*}"
+          statefulset="${item##*/}"
+          {{.KUBECTL}} rollout status "statefulset/${statefulset}" -n "${namespace}" --timeout=240s
+        done
+        {{.KUBECTL}} wait --for=condition=complete job/kafka-create-topics -n medical-messaging --timeout=180s
+
+  kong:repo:
+    cmds:
+      - '{{.HELM}} repo add kong https://charts.konghq.com --force-update >/dev/null'
+      - '{{.HELM}} repo update kong >/dev/null'
+
+  kong:render:
+    desc: Kong Helm chart와 platform/kong Kustomize 리소스를 렌더링합니다.
+    cmds:
+      - task kong:repo
+      - '{{.HELM}} template {{.KONG_RELEASE}} {{.KONG_CHART}} --version {{.KONG_CHART_VERSION}} --namespace {{.KONG_NAMESPACE}} -f {{.KONG_VALUES}} >/dev/null'
+      - '{{.KUBECTL}} kustomize platform/kong >/dev/null'
+
+  dev:kong:check:
+    desc: Docker Desktop dev용 Kong chart values와 Kong shared resource 렌더링을 검증합니다.
+    cmds:
+      - task kong:render
+
+  dev:kong:
+    desc: Docker Desktop dev에 Kong Ingress Controller/Gateway와 공통 plugin/consumer 리소스를 배포합니다.
+    cmds:
+      - task dev:kong:check
+      - '{{.KUBECTL}} apply -k platform/namespaces'
+      - '{{.KUBECTL}} create namespace {{.KONG_NAMESPACE}} --dry-run=client -o yaml | {{.KUBECTL}} apply -f -'
+      - '{{.HELM}} upgrade --install {{.KONG_RELEASE}} {{.KONG_CHART}} --version {{.KONG_CHART_VERSION}} --namespace {{.KONG_NAMESPACE}} --create-namespace -f {{.KONG_VALUES}} --wait --timeout=300s'
+      - '{{.KUBECTL}} rollout status deployment/{{.KONG_RELEASE}}-kong -n {{.KONG_NAMESPACE}} --timeout=240s'
+      - '{{.KUBECTL}} apply -k platform/kong'
+      - '{{.KUBECTL}} get ingressclass kong >/dev/null'
+      - task dev:kong:proxy
+
+  dev:kong:proxy:
+    desc: Kong proxy LoadBalancer가 localhost에서 열렸는지 확인합니다.
+    cmds:
+      - |
+        set -eu
+        namespace='{{.KONG_NAMESPACE}}'
+        service='{{.KONG_PROXY_SERVICE}}'
+        for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+          address="$({{.KUBECTL}} -n "${namespace}" get svc "${service}" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+          if [ -n "${address}" ] && ruby -rsocket -e 'TCPSocket.new("127.0.0.1", 80).close'; then
+            printf 'Kong proxy is available at http://localhost/ (LoadBalancer IP: %s)\n' "${address}"
+            exit 0
+          fi
+          sleep 1
+        done
+        {{.KUBECTL}} -n "${namespace}" get svc "${service}" >&2
+        printf '%s\n' 'Kong proxy LoadBalancer did not become reachable at http://localhost/.' >&2
+        exit 2
+
+  dev:kong:status:
+    desc: Kong IngressClass, controller/gateway, plugin/consumer 상태를 확인합니다.
+    cmds:
+      - '{{.KUBECTL}} get ingressclass kong'
+      - '{{.KUBECTL}} get pods,svc -n {{.KONG_NAMESPACE}}'
+      - '{{.KUBECTL}} get kongclusterplugins.configuration.konghq.com'
+      - '{{.KUBECTL}} get kongconsumers.configuration.konghq.com -n medical-auth'
+
+  dev:kong:down:
+    desc: Docker Desktop dev Kong 리소스를 정리합니다.
+    cmds:
+      - |
+        set -eu
+        {{.KUBECTL}} delete -k platform/kong --ignore-not-found=true
+        {{.HELM}} uninstall {{.KONG_RELEASE}} --namespace {{.KONG_NAMESPACE}} --ignore-not-found
+
+  dev:status:
+    desc: Docker Desktop Kubernetes에 배포된 Medikong namespace와 Helm release 상태를 봅니다.
+    cmds:
+      - '{{.KUBECTL}} get namespaces -l app.kubernetes.io/part-of=medikong'
+      - '{{.HELM}} list --all-namespaces --filter "{{.LOCAL_DOCKER_DESKTOP_RELEASE_SUFFIX}}"'
+      - task dev:kong:status
+
+  dev:down:
+    desc: Docker Desktop Kubernetes에 배포한 local Helm release와 Medikong namespace를 정리합니다.
+    cmds:
+      - |
+        set -eu
+        for service_file in values/services/*.yaml; do
+          service="$(basename "${service_file}" .yaml)"
+          namespace="$(ruby -ryaml -e 'puts YAML.load_file(ARGV[0]).fetch("app").fetch("namespace")' "${service_file}")"
+          release="${service}-{{.LOCAL_DOCKER_DESKTOP_RELEASE_SUFFIX}}"
+          {{.HELM}} uninstall "${release}" --namespace "${namespace}" --ignore-not-found
+        done
+        task dev:kong:down
+        {{.KUBECTL}} delete -k platform/data --ignore-not-found=true
+        {{.KUBECTL}} delete -k platform/namespaces --ignore-not-found=true
+
+  aws:check:
+    desc: 준비된 AWS kubeadm 클러스터에 등록할 GitOps entrypoint와 platform manifest를 검증합니다.
+    cmds:
+      - task platform:render
+      - task argo:validate
+
+  aws:bootstrap:
+    desc: 준비된 AWS kubeadm 클러스터의 Argo CD에 Medikong GitOps entrypoint를 등록/갱신합니다.
+    cmds:
+      - task aws:check
+      - '{{.KUBECTL}} apply -k platform/namespaces'
+      - '{{.KUBECTL}} apply -f {{.AWS_ARGO_ROOT}}'
+
+  aws:status:
+    desc: AWS kubeadm 클러스터의 Medikong namespace와 Argo CD Application 상태를 봅니다.
+    cmds:
+      - '{{.KUBECTL}} get namespaces -l app.kubernetes.io/part-of=medikong'
+      - '{{.KUBECTL}} get applications -n argocd'
+
+  scenario:network:
+    desc: AWS network 검증 시나리오 values를 렌더링합니다.
+    cmds:
+      - task scenario:render SCENARIO=network
+
+  scenario:hpa:
+    desc: AWS HPA 검증 시나리오 values를 렌더링합니다.
+    cmds:
+      - task scenario:render SCENARIO=hpa
+
+  scenario:storage:
+    desc: AWS storage 검증 시나리오 values를 렌더링합니다.
+    cmds:
+      - task scenario:render SCENARIO=storage
+
+  scenario:release:
+    desc: AWS release 검증 시나리오 values를 렌더링합니다.
+    cmds:
+      - task scenario:render SCENARIO=release
+
+  scenario:status:
+    desc: 정해진 검증 환경의 Medikong service와 pod 상태를 확인합니다.
+    cmds:
+      - '{{.KUBECTL}} get namespaces -l app.kubernetes.io/part-of=medikong'
+      - '{{.KUBECTL}} get pods,svc,hpa,pdb --all-namespaces -l app.kubernetes.io/part-of=medikong'
+
+  scenario:down:
+    desc: 정해진 검증 환경에서 scenario label이 붙은 워크로드를 정리합니다.
+    cmds:
+      - '{{.KUBECTL}} delete deploy,svc,hpa,pdb --all-namespaces -l medikong.io/scenario=true --ignore-not-found=true'
+
+  helm:lint:
+    cmds:
+      - '{{.HELM}} lint {{.SERVICE_CHART}}'
+
+  helm:template:all:
+    cmds:
+      - |
+        set -eu
+        for service_file in values/services/*.yaml; do
+          service="$(basename "${service_file}" .yaml)"
+          for env in {{.ENVIRONMENTS}}; do
+            extra_values=""
+            if [ -f "values/overrides/${env}/${service}.yaml" ]; then
+              extra_values="-f values/overrides/${env}/${service}.yaml"
+            fi
+            {{.HELM}} template "${service}-${env}" {{.SERVICE_CHART}} \
+              -f {{.VALUES_BASE}} \
+              -f "values/env/${env}.yaml" \
+              -f "${service_file}" \
+              ${extra_values} >/dev/null
+          done
+        done
+
+  helm:template:service:
+    cmds:
+      - |
+        set -eu
+        service='{{default "" .SERVICE}}'
+        if [ -z "${service}" ]; then
+          printf '%s\n' 'SERVICE is required, for example: task helm:template:service SERVICE=patient' >&2
+          exit 2
+        fi
+        service_file="values/services/${service}.yaml"
+        if [ ! -f "${service_file}" ]; then
+          printf 'Unknown service values file: %s\n' "${service_file}" >&2
+          exit 2
+        fi
+        for env in {{.ENVIRONMENTS}}; do
+          task helm:template:one SERVICE="${service}" ENV="${env}"
+        done
+
+  helm:template:env:
+    cmds:
+      - |
+        set -eu
+        env='{{default "" .ENV}}'
+        if [ -z "${env}" ]; then
+          printf '%s\n' 'ENV is required, for example: task helm:template:env ENV=aws-dev' >&2
+          exit 2
+        fi
+        if [ ! -f "values/env/${env}.yaml" ]; then
+          printf 'Unknown environment values file: %s\n' "values/env/${env}.yaml" >&2
+          exit 2
+        fi
+        for service_file in values/services/*.yaml; do
+          service="$(basename "${service_file}" .yaml)"
+          task helm:template:one SERVICE="${service}" ENV="${env}"
+        done
+
+  helm:template:one:
+    cmds:
+      - |
+        set -eu
+        service='{{default "" .SERVICE}}'
+        env='{{default "" .ENV}}'
+        if [ -z "${service}" ] || [ -z "${env}" ]; then
+          printf '%s\n' 'SERVICE and ENV are required, for example: task helm:template:one SERVICE=patient ENV=aws-dev' >&2
+          exit 2
+        fi
+        service_file="values/services/${service}.yaml"
+        env_file="values/env/${env}.yaml"
+        if [ ! -f "${service_file}" ]; then
+          printf 'Unknown service values file: %s\n' "${service_file}" >&2
+          exit 2
+        fi
+        if [ ! -f "${env_file}" ]; then
+          printf 'Unknown environment values file: %s\n' "${env_file}" >&2
+          exit 2
+        fi
+        extra_values=""
+        if [ -f "values/overrides/${env}/${service}.yaml" ]; then
+          extra_values="-f values/overrides/${env}/${service}.yaml"
+        fi
+        {{.HELM}} template "${service}-${env}" {{.SERVICE_CHART}} \
+          -f {{.VALUES_BASE}} \
+          -f "${env_file}" \
+          -f "${service_file}" \
+          ${extra_values} >/dev/null
+
+  scenario:all:
+    cmds:
+      - |
+        set -eu
+        for service_file in values/services/*.yaml; do
+          service="$(basename "${service_file}" .yaml)"
+          for scenario in {{.AWS_SCENARIOS}}; do
+            {{.HELM}} template "${service}-aws-scenario-${scenario}" {{.SERVICE_CHART}} \
+              -f {{.VALUES_BASE}} \
+              -f values/scenarios/aws/base.yaml \
+              -f "${service_file}" \
+              -f "values/scenarios/aws/${scenario}.yaml" >/dev/null
+          done
+        done
+
+  scenario:render:
+    cmds:
+      - |
+        set -eu
+        service='{{default "" .SERVICE}}'
+        scenario='{{default "" .SCENARIO}}'
+        if [ -z "${scenario}" ]; then
+          printf '%s\n' 'SCENARIO is required, for example: task scenario:render SCENARIO=network SERVICE=patient' >&2
+          exit 2
+        fi
+        if [ ! -f "values/scenarios/aws/${scenario}.yaml" ]; then
+          printf 'Unknown scenario values file: %s\n' "values/scenarios/aws/${scenario}.yaml" >&2
+          exit 2
+        fi
+        if [ -n "${service}" ]; then
+          service_file="values/services/${service}.yaml"
+          if [ ! -f "${service_file}" ]; then
+            printf 'Unknown service values file: %s\n' "${service_file}" >&2
+            exit 2
+          fi
+          {{.HELM}} template "${service}-aws-scenario-${scenario}" {{.SERVICE_CHART}} \
+            -f {{.VALUES_BASE}} \
+            -f values/scenarios/aws/base.yaml \
+            -f "${service_file}" \
+            -f "values/scenarios/aws/${scenario}.yaml" >/dev/null
+          exit 0
+        fi
+        for service_file in values/services/*.yaml; do
+          service="$(basename "${service_file}" .yaml)"
+          {{.HELM}} template "${service}-aws-scenario-${scenario}" {{.SERVICE_CHART}} \
+            -f {{.VALUES_BASE}} \
+            -f values/scenarios/aws/base.yaml \
+            -f "${service_file}" \
+            -f "values/scenarios/aws/${scenario}.yaml" >/dev/null
+        done
+
+  platform:render:
+    cmds:
+      - '{{.KUBECTL}} kustomize platform/namespaces >/dev/null'
+      - '{{.KUBECTL}} kustomize platform/data >/dev/null'
+      - '{{.KUBECTL}} kustomize platform/kong >/dev/null'
+
+  argo:validate:
+    cmds:
+      - |
+        set -eu
+        find argo -name '*.yaml' -exec ruby -e 'require "yaml"; ARGV.each { |file| YAML.load_file(file) }' {} +

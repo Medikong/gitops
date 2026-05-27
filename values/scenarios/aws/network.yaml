@@ -1,0 +1,12 @@
+environment: aws-scenario-network
+
+deployment:
+  podLabels:
+    medikong.io/scenario: "true"
+    medikong.io/scenario-scope: network
+
+ingress:
+  className: kong
+
+networkPolicy:
+  enabled: true

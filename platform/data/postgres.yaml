@@ -1,0 +1,359 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-db
+  namespace: medical-auth
+  labels:
+    app.kubernetes.io/part-of: medikong
+    app.kubernetes.io/name: auth-db
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: auth-db
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: auth-db
+  namespace: medical-auth
+  labels:
+    app.kubernetes.io/part-of: medikong
+    app.kubernetes.io/name: auth-db
+spec:
+  serviceName: auth-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: medikong
+        app.kubernetes.io/name: auth-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          args:
+            - -c
+            - shared_buffers=16MB
+            - -c
+            - effective_cache_size=64MB
+            - -c
+            - work_mem=1MB
+            - -c
+            - maintenance_work_mem=16MB
+            - -c
+            - max_connections=20
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - user
+                - -d
+                - auth_db
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          env:
+            - name: POSTGRES_USER
+              value: user
+            - name: POSTGRES_PASSWORD
+              value: password
+            - name: POSTGRES_DB
+              value: auth_db
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 192Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: patient-db
+  namespace: medical-patient
+  labels:
+    app.kubernetes.io/part-of: medikong
+    app.kubernetes.io/name: patient-db
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: patient-db
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: patient-db
+  namespace: medical-patient
+  labels:
+    app.kubernetes.io/part-of: medikong
+    app.kubernetes.io/name: patient-db
+spec:
+  serviceName: patient-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: patient-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: medikong
+        app.kubernetes.io/name: patient-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          args:
+            - -c
+            - shared_buffers=16MB
+            - -c
+            - effective_cache_size=64MB
+            - -c
+            - work_mem=1MB
+            - -c
+            - maintenance_work_mem=16MB
+            - -c
+            - max_connections=20
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - user
+                - -d
+                - patient_db
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          env:
+            - name: POSTGRES_USER
+              value: user
+            - name: POSTGRES_PASSWORD
+              value: password
+            - name: POSTGRES_DB
+              value: patient_db
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 192Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: appointment-db
+  namespace: medical-appointment
+  labels:
+    app.kubernetes.io/part-of: medikong
+    app.kubernetes.io/name: appointment-db
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: appointment-db
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: appointment-db
+  namespace: medical-appointment
+  labels:
+    app.kubernetes.io/part-of: medikong
+    app.kubernetes.io/name: appointment-db
+spec:
+  serviceName: appointment-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: appointment-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: medikong
+        app.kubernetes.io/name: appointment-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          args:
+            - -c
+            - shared_buffers=16MB
+            - -c
+            - effective_cache_size=64MB
+            - -c
+            - work_mem=1MB
+            - -c
+            - maintenance_work_mem=16MB
+            - -c
+            - max_connections=20
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - user
+                - -d
+                - appointment_db
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          env:
+            - name: POSTGRES_USER
+              value: user
+            - name: POSTGRES_PASSWORD
+              value: password
+            - name: POSTGRES_DB
+              value: appointment_db
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 192Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prescription-db
+  namespace: medical-prescription
+  labels:
+    app.kubernetes.io/part-of: medikong
+    app.kubernetes.io/name: prescription-db
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: prescription-db
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: prescription-db
+  namespace: medical-prescription
+  labels:
+    app.kubernetes.io/part-of: medikong
+    app.kubernetes.io/name: prescription-db
+spec:
+  serviceName: prescription-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prescription-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: medikong
+        app.kubernetes.io/name: prescription-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          args:
+            - -c
+            - shared_buffers=16MB
+            - -c
+            - effective_cache_size=64MB
+            - -c
+            - work_mem=1MB
+            - -c
+            - maintenance_work_mem=16MB
+            - -c
+            - max_connections=20
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - user
+                - -d
+                - prescription_db
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          env:
+            - name: POSTGRES_USER
+              value: user
+            - name: POSTGRES_PASSWORD
+              value: password
+            - name: POSTGRES_DB
+              value: prescription_db
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 192Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi

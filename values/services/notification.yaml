@@ -7,17 +7,21 @@ app:
 
 image:
   repository: notification-service
-  tag: dev-notification
+  tag: dev
 
 container:
   port: 8084
   env:
-    - name: DATABASE_URL
-      value: postgresql+psycopg://user:password@notification-db:5432/notification_db
+    - name: MONGODB_URL
+      value: mongodb://notification-db:27017
+    - name: MONGODB_DB_NAME
+      value: notification_db
     - name: KAFKA_BOOTSTRAP_SERVERS
       value: kafka.medical-messaging.svc.cluster.local:9092
     - name: APPOINTMENT_CONFIRMED_TOPIC
       value: appointment-confirmed
+    - name: PRESCRIPTION_ISSUED_TOPIC
+      value: prescription-issued
 
 service:
   port: 8084

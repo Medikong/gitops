@@ -17,8 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  kustomize:
-    name: Kustomize render
+  gitops:
+    name: Taskfile validate
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -29,5 +29,11 @@ jobs:
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
 
-      - name: Render GitOps overlays
-        run: make validate
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+
+      - name: Validate GitOps manifests
+        run: task validate

@@ -1,0 +1,11 @@
+environment: aws-scenario-storage
+
+deployment:
+  podLabels:
+    medikong.io/scenario: "true"
+    medikong.io/scenario-scope: storage
+
+container:
+  env:
+    - name: MEDIKONG_SCENARIO_STORAGE
+      value: enabled

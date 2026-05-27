@@ -1,21 +1,23 @@
 # Medikong GitOps
 
-이 repo는 준비된 Kubernetes 클러스터 위에서 MediKong 배포 선언과 운영 add-on을 관리하는 GitOps 전담 repo입니다.
+이 repo는 준비된 Kubernetes 클러스터 위에서 MediKong 배포 선언과 운영 add-on을 관리하는 GitOps 전담 repo다.
 
-서비스 코드, 이미지 빌드, VM 생성, 서버 초기 bootstrap은 이 repo의 책임이 아닙니다. 여기서는 이미 만들어진 container image tag를 배포 values에 반영하고, Argo CD가 그 선언을 클러스터에 동기화하도록 관리합니다.
+서비스 코드, image build, VM 생성, 서버 초기 bootstrap은 이 repo의 책임이 아니다. 여기서는 이미 만들어진 container image tag를 values에 반영하고, Argo CD가 그 선언을 클러스터에 동기화하도록 관리한다.
 
 ## 책임 범위
 
 | 포함 | 설명 |
 | --- | --- |
-| `k8s/` | Kubernetes base, Kustomize overlay, namespace, storage, Kong, MetalLB, NetworkPolicy |
 | `charts/` | 서비스별 Helm release에 공통으로 쓰는 chart template |
-| `values/` | `base -> env -> service -> override` 순서로 합성하는 Helm values |
-| `platform/` | namespace, gateway, observability, policy처럼 서비스보다 먼저 준비되는 공통 기반 |
-| `argo/` | Argo CD Application과 설치 보조 스크립트 |
+| `values/` | `base -> env -> service -> optional override` 순서로 합성하는 Helm values |
+| `platform/` | namespace, gateway, observability, policy, data처럼 서비스보다 먼저 준비되는 공통 기반 |
+| `argo/` | 서비스별 Helm Application 초안과 설치 보조 스크립트 |
+| `Taskfile.yml` | `dev`, `aws`, `scenario` 중심의 기본 명령 표면 |
+| `Makefile` | 기존 사용자를 위한 Taskfile wrapper |
+| `archive/k8s-kustomize/` | 기존 Kustomize 구조 reference와 이식 근거 |
 | `cluster/ansible/` | 준비된 서버 위에서 Kubernetes cluster와 운영 add-on을 확인하거나 bootstrap하는 선별 playbook |
-| `cluster/scripts/` | MetalLB, local registry CA, image tag 갱신, Kubernetes 상태 확인 스크립트 |
-| `cluster/stacks/observability/` | Prometheus, Grafana, Loki, Alloy, Tempo values, manifest |
+| `cluster/scripts/` | MetalLB, registry CA, image tag 갱신, Kubernetes 상태 확인용 legacy 보조 스크립트 |
+| `cluster/stacks/observability/` | Prometheus, Grafana, Loki, Alloy, Tempo values, manifest reference |
 | `.github/workflows/` | GitOps manifest 렌더링과 Kubernetes 보안 스캔 |
 
 ## 제외 범위
@@ -25,83 +27,179 @@
 | Terraform, cloud network, VM topology | infra repo |
 | infra repo VM definition, VM 생성, SSH key 동기화 | infra repo |
 | 서버 패키지 설치, OS 초기 bootstrap | infra repo |
-| FastAPI 서비스 코드와 frontend 코드 | services repo |
-| 서비스 단위 테스트, Docker Compose E2E | services repo |
-| image publishing pipeline | services repo 또는 release pipeline |
+| FastAPI 서비스 코드와 frontend 코드 | service repo |
+| 서비스 단위 테스트, Docker Compose E2E | service repo |
+| image publishing pipeline | service repo 또는 release pipeline |
+| 별도 kind CLI 기반 클러스터 생성 자동화 | 후속 범위 |
+| 실제 AWS 인프라 생성/삭제 실행 | 후속 범위 |
 
 ## 기본 흐름
 
-1. service release pipeline이 container image를 만들고 registry에 게시합니다.
-2. 이 repo에서 image tag를 서비스별 values 또는 기존 Kustomize overlay에 반영합니다.
-3. GitOps 검증 workflow가 Kustomize/Helm 렌더링과 manifest 보안 스캔을 실행합니다.
-4. Argo CD가 `Medikong/gitops`의 overlay 또는 Helm release 경로를 감시하고 클러스터에 동기화합니다.
+1. service release pipeline이 container image를 만들고 registry에 게시한다.
+2. 이 repo에서 image tag를 `values/services/*` 또는 `values/overrides/*`에 반영한다.
+3. `task validate`가 Helm chart, 모든 서비스/환경 render, AWS scenario values render, platform render를 확인한다.
+4. 준비된 AWS kubeadm 클러스터에서는 `task aws:bootstrap`으로 Argo CD Application 진입점을 등록하거나 갱신한다.
+5. Argo CD가 서비스별 Helm Application을 동기화한다.
 
 ## 자주 쓰는 명령
 
+Taskfile이 기본 명령 표면이다.
+
+개발자가 Docker Desktop Kubernetes에 올릴 때는 기본 workspace sibling layout에서 한 명령으로 image build/push와 Helm 배포를 이어갈 수 있다.
+
+```bash
+task dev
+```
+
+`task dev`는 `SERVICE_REPO`의 공개 Makefile 명령을 호출해서 이미지를 만들고 push한 뒤, 같은 registry/tag를 Helm values에 넘긴다. 이어서 namespace, `platform/data`, Kong Ingress Controller/Gateway, 서비스 Helm release를 순서대로 준비한다. 기본값은 `SERVICE_REPO=../service`, `DEV_REGISTRY=localhost:5001`, `DEV_IMAGE_TAG=dev`다.
+
+```bash
+task dev:check
+task dev:registry
+task dev:images
+task dev:kong:check
+task dev:kong:status
+task dev SERVICE_REPO=../service DEV_REGISTRY=localhost:5001 DEV_IMAGE_TAG=dev
+```
+
+배포 후 dashboard와 API는 Kong proxy를 통해 접근한다.
+
+```text
+Dashboard: http://localhost/
+Auth API:  http://localhost/auth
+```
+
+인증이 필요한 API smoke는 demo token을 받은 뒤 실행한다.
+
+```bash
+TOKEN="$(
+  curl -fsS -X POST http://localhost/auth/login \
+    -H 'content-type: application/json' \
+    -d '{"email":"staff","password":"staff1234"}' \
+  | ruby -rjson -e 'puts JSON.parse(STDIN.read).fetch("accessToken")'
+)"
+
+curl -fsS http://localhost/patients -H "Authorization: Bearer ${TOKEN}"
+curl -fsS http://localhost/appointments -H "Authorization: Bearer ${TOKEN}"
+```
+
+배포 후 상태 확인과 정리는 다음처럼 한다.
+
+```bash
+task dev:status
+task dev:down
+```
+
+AWS 쪽 명령은 인프라 생성이 아니라, 이미 AWS에 kubeadm 클러스터와 Argo CD가 준비되어 있다고 가정한 GitOps bootstrap 표면이다.
+
+```bash
+task aws:check
+task aws:bootstrap
+task aws:status
+```
+
+코드 기반 Kubernetes 검증 시나리오는 `scenario` 아래에 둔다. 단순 생존 확인이 아니라 network, HPA, storage, release 동작을 values 조합으로 검증하는 표면이다.
+
+```bash
+task scenario:network
+task scenario:hpa
+task scenario:storage
+task scenario:release
+task scenario:status
+```
+
+Makefile은 호환 wrapper다.
+
 ```bash
 make validate
-make render-local-all
-make render-aws-all
 make helm-lint
-make helm-template-patient-local
-make helm-template-patient-aws-dev
-make helm-template-patient-aws-prod
-make update-local-image-tags IMAGE_TAG=dev-001
+make helm-template SERVICE=patient ENV=aws-prod
+make helm-template-service SERVICE=patient
+make scenario SCENARIO=hpa SERVICE=patient
 ```
 
-`update-local-image-tags`는 local overlay의 image tag만 바꿉니다. 이미지를 build하거나 push하지 않습니다.
+## 환경 이름
+
+`values/env/*`는 runtime/provisioner가 드러나는 이름을 사용한다.
+
+| 환경 | 목적 |
+| --- | --- |
+| `local-docker-desktop-kubeadm` | Docker Desktop Kubernetes에서 kubeadm 계열 구성을 검증 |
+| `local-docker-desktop-kind` | Docker Desktop runtime 위 kind-style 구성을 values로 검증 |
+| `local-vm-kubeadm` | VM 기반 kubeadm 클러스터와 registry 경로 검증 |
+| `aws-dev` | 지속 검증용 클라우드 개발 환경 |
+| `aws-prod` | 운영 목표 환경 |
+
+`task dev`, `task dev:check`, `task dev:images`, `task dev:kong:*`, `task dev:status`, `task dev:down`은 내부적으로 `local-docker-desktop-kubeadm` values와 `platform/kong/values-local.yaml`을 사용한다. 개발자는 평소에 환경 파일명을 직접 넘기지 않아도 된다.
+
+Docker Desktop 개발 루프는 VM/kubeadm lab registry인 `10.10.10.10:5000`을 쓰지 않는다. 기본 dev registry는 Docker Desktop host에서 push 가능한 `localhost:5001`이고, kindest-node 기반 multi-node 클러스터에서는 Taskfile이 node containerd mirror를 설정해서 같은 image reference를 pull하게 한다. 이 repo는 service Dockerfile이나 build context를 직접 알지 않고, `service` repo의 `make app-images-push IMAGE_REGISTRY=<registry> IMAGE_TAG=<tag>` 표면만 호출한다.
+
+Kong proxy는 Docker Desktop local에서 `LoadBalancer` Service로 열리며, 현재 클러스터의 `docker/desktop-cloud-provider-kind`가 `http://localhost/`로 연결한다. 별도 dashboard port-forward는 필요하지 않다.
+
+다른 위치의 service repo나 다른 registry/tag를 쓸 때는 다음처럼 넘긴다.
 
 ```bash
-make update-local-image-tags IMAGE_TAG=dev-001 REGISTRY=10.10.10.10:5000
+task dev:images SERVICE_REPO=/path/to/service DEV_REGISTRY=localhost:5001 DEV_IMAGE_TAG=dev-001
+task dev SERVICE_REPO=/path/to/service DEV_REGISTRY=localhost:5001 DEV_IMAGE_TAG=dev-001
 ```
 
-Argo CD가 볼 기본 Application은 `argo/application.yaml`입니다.
+`10.10.10.10:5000`은 `local-vm-kubeadm`용 registry다. Docker Desktop 개발 루프에서 이 값을 재사용하면 Pod image pull 경로와 service repo push 경로가 어긋나기 쉽다.
 
-```bash
-kubectl apply -f argo/application.yaml -n argocd
-```
+AWS 검증 시나리오는 단일 환경이 아니라 scenario values로 표현한다.
+
+| 시나리오 | Values |
+| --- | --- |
+| `aws-scenario-network` | `values/scenarios/aws/base.yaml` + `values/scenarios/aws/network.yaml` |
+| `aws-scenario-hpa` | `values/scenarios/aws/base.yaml` + `values/scenarios/aws/hpa.yaml` |
+| `aws-scenario-storage` | `values/scenarios/aws/base.yaml` + `values/scenarios/aws/storage.yaml` |
+| `aws-scenario-release` | `values/scenarios/aws/base.yaml` + `values/scenarios/aws/release.yaml` |
 
 ## 구조
 
 ```text
 gitops/
   README.md
+  Taskfile.yml
   Makefile
   .github/
-    workflows/
-      gitops-validate.yml
-      k8s-security-scan.yml
   argo/
+    application.yaml
+    applications/
+      aws-dev/
+        root.yaml
+        services/
   charts/
     medikong-service/
   values/
     base.yaml
     env/
+      local-docker-desktop-kubeadm.yaml
+      local-docker-desktop-kind.yaml
+      local-vm-kubeadm.yaml
+      aws-dev.yaml
+      aws-prod.yaml
     services/
+    scenarios/
+      aws/
     overrides/
   platform/
-    namespaces/
+    data/
     kong/
+    namespaces/
     observability/
     policies/
-  k8s/
+  archive/
+    k8s-kustomize/
   cluster/
-    ansible/
-      group_vars/
-      playbooks/
-    docs/
-    scripts/
-    stacks/
-      observability/
 ```
 
 ## 운영 메모
 
-- `k8s/overlays/local/all`은 로컬 kubeadm 클러스터 전체 manifest 렌더링 entrypoint입니다.
-- `k8s/overlays/aws/all`은 AWS 배포 실험용 overlay entrypoint입니다.
-- `charts/medikong-service`는 서비스별 Helm release의 공통 chart입니다.
-- `values/services/patient.yaml`은 Helm 전환 pilot 서비스 values입니다.
-- Helm values는 `values/base.yaml`, `values/env/<env>.yaml`, `values/services/<service>.yaml`, `values/overrides/<env>/<service>.yaml` 순서로 합성합니다.
-- `cluster/ansible`에는 inventory를 포함하지 않습니다. inventory와 VM topology는 infra repo에서 준비한 값을 사용합니다.
-- `cluster/stacks/observability/install.sh`는 `cluster/stacks/observability` 디렉터리에서 실행합니다.
-- live cluster에 직접 적용하는 명령은 명시적으로 실행할 때만 사용합니다.
+- 기존 Kustomize 구조는 `archive/k8s-kustomize/`에 reference로 남긴다. 새 운영 경로로 사용하지 않는다.
+- Helm values는 `values/base.yaml`, `values/env/<env>.yaml`, `values/services/<service>.yaml`, `values/overrides/<env>/<service>.yaml` 순서로 합성한다.
+- `charts/medikong-service`는 서비스별 Helm release의 공통 chart다.
+- `platform/namespaces`는 서비스 release보다 먼저 렌더링되는 공통 기반이다.
+- `task aws:bootstrap`은 서비스 Helm release를 직접 올리지 않고 Argo CD Application 진입점을 적용한다.
+- Kong, observability, policy, data 리소스의 이식 후보는 `docs/architecture/k8s-kustomize-archive-inventory.md`에 정리한다.
+- `cluster/ansible`에는 inventory를 포함하지 않는다. inventory와 VM topology는 infra repo에서 준비한 값을 사용한다.
+- live cluster에 직접 적용하는 명령은 명시적으로 실행할 때만 사용한다.

@@ -294,15 +294,6 @@
         force: true
       become_user: "{{ ansible_user }}"
 
-    - name: Deploy AWS Kubernetes overlay
-      ansible.builtin.command:
-        argv:
-          - kubectl
-          - apply
-          - -k
-          - k8s/overlays/aws/all
-      args:
-        chdir: "{{ gitops_repository_path }}"
-      environment:
-        KUBECONFIG: "{{ kubernetes_admin_conf_path }}"
-      changed_when: false
+    - name: Show GitOps handoff after cluster bootstrap
+      ansible.builtin.debug:
+        msg: "Cluster bootstrap is complete. GitOps manifests now render through Taskfile/Helm and Argo CD service Applications; archived Kustomize overlays are reference only."

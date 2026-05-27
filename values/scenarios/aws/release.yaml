@@ -1,0 +1,19 @@
+environment: aws-scenario-release
+
+deployment:
+  replicas: 2
+  podLabels:
+    medikong.io/scenario: "true"
+    medikong.io/scenario-scope: release
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+serviceMonitor:
+  enabled: true

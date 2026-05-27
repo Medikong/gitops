@@ -19,17 +19,23 @@ tags:
 
 ## 배경
 
-현재 `k8s/` 구조는 `namespaces`, `storage`, `kong`, `network-policies`, `base/apps`, `base/deps`, `overlays/local/*`, `overlays/aws/*`처럼 레이어 중심으로 나뉘어 있다.
+기존 Kustomize 구조는 namespace, storage, Kong, network policy, app, dependency, overlay를 레이어 중심으로 관리했다.
 
-이 구조는 Kubernetes 자산을 초기 이주하고 전체 manifest를 한 번에 렌더링하기에는 적합하다. 하지만 PRD의 장기 목표는 서비스별 독립 배포, 독립 확장, 장애 격리다. 레이어 중심 구조만 유지하면 `patient` 하나를 배포하거나 롤백하려고 할 때 다른 서비스와 같은 overlay 안에서 함께 다뤄질 가능성이 커진다.
+이 구조는 Kubernetes 자산을 초기 이주하고 전체 manifest를 한 번에 렌더링하기에는 적합했다. 하지만 PRD의 장기 목표는 서비스별 독립 배포, 독립 확장, 장애 격리다. 레이어 중심 구조만 유지하면 `patient` 하나를 배포하거나 롤백하려고 할 때 다른 서비스와 같은 묶음 안에서 함께 다뤄질 가능성이 커진다.
 
-장기적으로 관리해야 할 환경은 다음 세 가지다.
+따라서 기존 Kustomize 구조는 `archive/k8s-kustomize/`에 reference로 보존하고, 새 운영 경로는 `charts/`, `values/`, `platform/`, `argo/`, `Taskfile.yml`로 전환한다.
+
+장기적으로 관리해야 할 환경은 다음처럼 명확히 나눈다.
 
 | 환경 | 목적 |
-|---|---|
-| `local` | 개인 로컬 Kubernetes 실습과 빠른 검증 |
-| `aws-dev` | 클라우드 개발/검증 환경 |
-| `aws-prod` | 운영형 환경 |
+| --- | --- |
+| `local-docker-desktop-kubeadm` | Docker Desktop Kubernetes에서 kubeadm 계열 구성을 검증하며 Docker Desktop용 local registry를 쓴다 |
+| `local-docker-desktop-kind` | Docker Desktop runtime 위 kind-style 구성을 values로 검증 |
+| `local-vm-kubeadm` | VM 기반 kubeadm 클러스터 검증 |
+| `aws-dev` | 클라우드 개발/지속 검증 환경 |
+| `aws-prod` | 운영 목표 환경 |
+
+AWS scenario는 단일 환경이 아니라 `aws-scenario-network`, `aws-scenario-hpa`, `aws-scenario-storage`, `aws-scenario-release` 검증 시나리오 values로 둔다.
 
 서비스별로 필요한 Kubernetes 리소스는 거의 같은 패턴을 가진다.
 
@@ -44,8 +50,6 @@ tags:
 - `ServiceMonitor`
 
 이 리소스들을 서비스마다 순수 YAML로 복제하면 중복이 커진다. 반대로 서비스별 values를 리소스 단위 파일로 너무 잘게 쪼개면 파일 수와 Argo CD `valueFiles` 목록이 빠르게 늘어난다.
-
-따라서 이 repo는 Helm의 일반적인 사용 방식에 맞춰 공통 chart template을 두고, 공통값, 환경값, 서비스값, 예외 override를 순서대로 합성하는 구조를 사용한다.
 
 ## 결정
 
@@ -75,7 +79,9 @@ charts/
 values/
   base.yaml
   env/
-    local.yaml
+    local-docker-desktop-kubeadm.yaml
+    local-docker-desktop-kind.yaml
+    local-vm-kubeadm.yaml
     aws-dev.yaml
     aws-prod.yaml
   services/
@@ -85,6 +91,13 @@ values/
     prescription.yaml
     notification.yaml
     dashboard.yaml
+  scenarios/
+    aws/
+      base.yaml
+      network.yaml
+      hpa.yaml
+      storage.yaml
+      release.yaml
   overrides/
     aws-prod/
       patient.yaml
@@ -98,6 +111,7 @@ platform/
   kong/
   observability/
   policies/
+  data/
 ```
 
 Helm values 적용 순서는 다음 원칙을 따른다.
@@ -109,25 +123,13 @@ base
 -> optional service-env override
 ```
 
-예를 들어 `patient`를 `aws-dev`에 배포할 때 Argo CD Application은 다음 values를 조합한다.
+AWS scenario는 다음 순서로 합성한다.
 
-```yaml
-helm:
-  valueFiles:
-    - ../../values/base.yaml
-    - ../../values/env/aws-dev.yaml
-    - ../../values/services/patient.yaml
-```
-
-`aws-prod`에서 `patient`만 별도 리소스나 replica 설정이 필요하면 마지막에 override를 추가한다.
-
-```yaml
-helm:
-  valueFiles:
-    - ../../values/base.yaml
-    - ../../values/env/aws-prod.yaml
-    - ../../values/services/patient.yaml
-    - ../../values/overrides/aws-prod/patient.yaml
+```text
+base
+-> scenarios/aws/base
+-> service
+-> scenarios/aws/<experiment>
 ```
 
 ## 책임 경계
@@ -135,13 +137,15 @@ helm:
 공통 Helm chart는 서비스 배포 표준이다. values 파일은 그 표준에 넣을 입력값이다.
 
 | 영역 | 위치 | 원칙 |
-|---|---|---|
+| --- | --- | --- |
 | 공통 Kubernetes manifest template | `charts/medikong-service/templates/*` | 중복을 줄이고 배포 표준을 강제한다 |
 | 공통 기본값 | `values/base.yaml` | 모든 환경과 서비스에 적용되는 기본값을 둔다 |
-| 환경 공통값 | `values/env/*` | `local`, `aws-dev`, `aws-prod` 차이를 표현한다 |
+| 환경 공통값 | `values/env/*` | runtime/provisioner 또는 지속 환경 차이를 표현한다 |
+| AWS scenario 값 | `values/scenarios/aws/*` | 코드 기반 Kubernetes 검증 시나리오 차이를 환경과 분리한다 |
 | 서비스별 값 | `values/services/<service>.yaml` | image, port, env, route, resource 등 서비스 고유 설정을 둔다 |
 | 예외 override | `values/overrides/<env>/<service>.yaml` | 특정 서비스와 환경의 예외만 둔다 |
-| 플랫폼 공통 리소스 | `platform/*` | namespace, gateway, observability, policy처럼 서비스 release와 lifecycle이 다른 리소스를 둔다 |
+| 플랫폼 공통 리소스 | `platform/*` | namespace, gateway, observability, policy, data처럼 서비스 release와 lifecycle이 다른 리소스를 둔다 |
+| Kustomize reference | `archive/k8s-kustomize/*` | 이식 근거로만 남기고 운영 경로로 사용하지 않는다 |
 
 Namespace 생성은 기본적으로 `platform/namespaces`에서 먼저 관리한다.
 
@@ -149,15 +153,23 @@ Namespace 생성은 기본적으로 `platform/namespaces`에서 먼저 관리한
 
 ## 단일 서비스 배포 흐름
 
-`patient` 서비스만 배포할 때는 서비스 image를 services/release pipeline에서 만들고 registry에 게시한 뒤, GitOps repo에서 `patient`의 image tag만 갱신한다.
+`patient` 서비스만 배포할 때는 서비스 image를 service/release pipeline에서 만들고 registry에 게시한 뒤, GitOps repo에서 `patient`의 image tag만 갱신한다.
 
 ```text
-services repo
+service repo
 -> patient-service image build/push
 -> gitops repo values/services/patient.yaml 또는 values/overrides/<env>/patient.yaml image tag update
 -> Argo CD patient-aws-dev Application sync
 -> Kubernetes patient Deployment rollout
 ```
+
+Docker Desktop local dev에서는 개발 편의를 위해 GitOps repo의 `task dev:images`와 `task dev`가 service repo의 공개 Makefile target을 호출한다. 이 의존은 local dev 명령에만 존재하며, 운영/AWS Argo CD bootstrap은 `SERVICE_REPO`에 의존하지 않는다.
+
+```bash
+task dev SERVICE_REPO=../service DEV_REGISTRY=localhost:5001 DEV_IMAGE_TAG=dev
+```
+
+Docker Desktop dev registry는 VM lab registry인 `10.10.10.10:5000`과 분리한다. kindest-node 기반 multi-node 클러스터에서는 host Docker image store가 Pod pull 경로가 아니므로, local registry에 push하고 node containerd mirror를 통해 pull한다.
 
 다른 서비스의 values나 Argo CD Application은 변경하지 않는다.
 
@@ -209,6 +221,7 @@ charts/auth/
 - `patient`만 sync, rollback, canary 전환하는 흐름을 만들 수 있다.
 - 공통 Kubernetes manifest template 중복이 줄어든다.
 - 환경별 차이는 `values/env/*`로 관리한다.
+- AWS scenario는 `values/scenarios/aws/*`로 관리한다.
 - 서비스별 차이는 `values/services/*`로 관리한다.
 - 특정 서비스와 환경의 예외만 `values/overrides/*`에 둔다.
 - Helm의 일반적인 values layering 방식에 맞춰 repo 규칙을 단순하게 유지한다.
@@ -226,7 +239,8 @@ charts/auth/
 공통 chart 변경은 플랫폼 배포 표준 변경으로 취급한다.
 
 - chart template 변경 PR과 서비스 image tag 변경 PR은 분리한다.
-- chart 변경 시 모든 서비스와 환경 조합을 `helm template`으로 렌더링한다.
+- chart 변경 시 모든 서비스와 주요 환경 조합을 `helm template`으로 렌더링한다.
+- AWS scenario values도 모든 서비스에 대해 렌더링한다.
 - `values.schema.json`을 추가해 필수 값과 타입을 검증한다.
 - `helm lint`와 manifest 보안 스캔을 CI에서 실행한다.
 - 공통 chart가 지나치게 많은 예외를 품기 시작하면 chart를 유형별로 나눈다.
@@ -248,23 +262,20 @@ charts/
 이 결정이 실제 구조로 구현되면 다음 검증이 가능해야 한다.
 
 ```bash
-helm lint charts/medikong-service
-helm template patient-local charts/medikong-service \
-  -f values/base.yaml \
-  -f values/env/local.yaml \
-  -f values/services/patient.yaml
+task validate
+task helm:lint
+task helm:template:one SERVICE=patient ENV=aws-dev
+task helm:template:service SERVICE=patient
+task helm:template:env ENV=local-vm-kubeadm
+task scenario:network
 ```
 
-prod override가 있는 서비스는 다음처럼 렌더링한다.
+기존 사용자는 Makefile wrapper를 쓸 수 있다.
 
 ```bash
-helm template patient-aws-prod charts/medikong-service \
-  -f values/base.yaml \
-  -f values/env/aws-prod.yaml \
-  -f values/services/patient.yaml \
-  -f values/overrides/aws-prod/patient.yaml
+make validate
+make helm-lint
+make helm-template SERVICE=patient ENV=aws-prod
 ```
 
-공통 chart가 바뀐 경우에는 모든 서비스와 환경 조합을 렌더링해야 한다.
-
-서비스 values만 바뀐 경우에는 해당 서비스와 대상 환경 렌더링을 최소 검증 단위로 삼는다.
+공통 chart가 바뀐 경우에는 모든 서비스와 주요 환경 조합을 렌더링해야 한다. 서비스 values만 바뀐 경우에는 해당 서비스와 대상 환경 렌더링을 최소 검증 단위로 삼는다.

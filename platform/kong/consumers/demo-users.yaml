@@ -1,0 +1,71 @@
+apiVersion: configuration.konghq.com/v1
+kind: KongConsumer
+metadata:
+  name: staff-user
+  annotations:
+    kubernetes.io/ingress.class: kong
+  labels:
+    app.kubernetes.io/part-of: medikong
+username: staff-user
+credentials:
+  - staff-jwt
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: staff-jwt
+  labels:
+    konghq.com/credential: jwt
+    app.kubernetes.io/part-of: medikong
+stringData:
+  key: staff
+  secret: staff-secret
+  algorithm: HS256
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongConsumer
+metadata:
+  name: patient-user
+  annotations:
+    kubernetes.io/ingress.class: kong
+  labels:
+    app.kubernetes.io/part-of: medikong
+username: patient-user
+credentials:
+  - patient-jwt
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: patient-jwt
+  labels:
+    konghq.com/credential: jwt
+    app.kubernetes.io/part-of: medikong
+stringData:
+  key: patient
+  secret: patient-secret
+  algorithm: HS256
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongConsumer
+metadata:
+  name: doctor-user
+  annotations:
+    kubernetes.io/ingress.class: kong
+  labels:
+    app.kubernetes.io/part-of: medikong
+username: doctor-user
+credentials:
+  - doctor-jwt
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: doctor-jwt
+  labels:
+    konghq.com/credential: jwt
+    app.kubernetes.io/part-of: medikong
+stringData:
+  key: doctor
+  secret: doctor-secret
+  algorithm: HS256

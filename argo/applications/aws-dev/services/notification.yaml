@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: notification-aws-dev
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/Medikong/gitops.git
+      targetRevision: HEAD
+      path: charts/medikong-service
+      helm:
+        releaseName: notification-aws-dev
+        valueFiles:
+          - $values/values/base.yaml
+          - $values/values/env/aws-dev.yaml
+          - $values/values/services/notification.yaml
+    - repoURL: https://github.com/Medikong/gitops.git
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: medical-notification
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=false

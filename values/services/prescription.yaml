@@ -7,7 +7,7 @@ app:
 
 image:
   repository: prescription-service
-  tag: dev-prescription
+  tag: dev
 
 container:
   port: 8083
@@ -16,6 +16,10 @@ container:
       value: postgresql+psycopg://user:password@prescription-db:5432/prescription_db
     - name: PATIENT_SERVICE_URL
       value: http://patient-service.medical-patient.svc.cluster.local:8081
+    - name: KAFKA_BOOTSTRAP_SERVERS
+      value: kafka.medical-messaging.svc.cluster.local:9092
+    - name: PRESCRIPTION_ISSUED_TOPIC
+      value: prescription-issued
 
 service:
   port: 8083

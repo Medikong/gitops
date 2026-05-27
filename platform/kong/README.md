@@ -1,5 +1,67 @@
 # Kong platform resources
 
-Kong Gateway 설치와 cluster-scoped Kong 정책은 서비스 Helm release보다 먼저 준비하는 플랫폼 영역으로 둔다.
+Kong Gateway와 Kong Ingress Controller는 서비스 Helm release보다 먼저 준비하는 platform 레이어다. 서비스별 `Ingress` 객체는 `charts/medikong-service` release가 계속 관리하지만, `Ingress`만 있어서는 로컬 브라우저 접속이 되지 않는다. `kong` `IngressClass`, Kong controller/gateway, 공통 `KongClusterPlugin`, demo `KongConsumer`가 함께 준비되어야 한다.
 
-현재 실사용 manifest는 기존 `k8s/kong` 구조를 reference로 유지한다. 서비스별 Ingress는 `charts/medikong-service` release가 관리한다.
+## Docker Desktop dev
+
+`task dev`는 Docker Desktop local loop에서 다음 순서로 동작한다.
+
+1. Helm/Kustomize render 검증
+2. `service` repo image build/push
+3. Medikong namespace 생성
+4. `platform/data` DB/Kafka 배포
+5. Kong Helm release와 shared gateway resource 배포
+6. 서비스별 Helm release 배포
+
+Kong chart는 `platform/kong/values-local.yaml`을 사용한다. 현재 Docker Desktop 클러스터에는 `docker/desktop-cloud-provider-kind`가 있으므로 proxy Service는 `LoadBalancer`로 열고, 로컬 브라우저에서는 `http://localhost/`로 접근한다.
+
+```bash
+task dev:kong:check
+task dev:kong
+task dev:kong:status
+```
+
+## Local URLs
+
+`task dev SERVICE_REPO=../service DEV_REGISTRY=localhost:5001 DEV_IMAGE_TAG=dev` 후 기본 접속 주소는 다음과 같다.
+
+| 대상 | URL |
+| --- | --- |
+| Dashboard | `http://localhost/` |
+| Auth API | `http://localhost/auth` |
+| Patient API | `http://localhost/patients` |
+| Appointment API | `http://localhost/appointments` |
+| Prescription API | `http://localhost/prescriptions` |
+| Notification API | `http://localhost/notifications` |
+
+## Smoke
+
+Auth와 dashboard route는 JWT plugin을 붙이지 않는다. 나머지 API route는 `medikong-jwt`와 `medikong-identity-headers`를 통해 demo token을 검증하고 `X-User-*` header를 upstream service에 전달한다.
+
+```bash
+curl -fsS http://localhost/auth/demo-accounts
+
+TOKEN="$(
+  curl -fsS -X POST http://localhost/auth/login \
+    -H 'content-type: application/json' \
+    -d '{"email":"staff","password":"staff1234"}' \
+  | ruby -rjson -e 'puts JSON.parse(STDIN.read).fetch("accessToken")'
+)"
+
+curl -fsS http://localhost/patients -H "Authorization: Bearer ${TOKEN}"
+curl -fsS http://localhost/appointments -H "Authorization: Bearer ${TOKEN}"
+curl -fsS http://localhost/prescriptions -H "Authorization: Bearer ${TOKEN}"
+curl -fsS http://localhost/notifications -H "Authorization: Bearer ${TOKEN}"
+```
+
+## Resource Ownership
+
+| 리소스 | 위치 | 소유 |
+| --- | --- | --- |
+| Kong Helm values | `platform/kong/values-local.yaml` | platform |
+| `IngressClass/kong` | `platform/kong/ingressclass.yaml` | platform |
+| `KongClusterPlugin` | `platform/kong/plugins` | platform |
+| demo `KongConsumer`/JWT `Secret` | `platform/kong/consumers` | platform |
+| 서비스별 `Ingress` | `values/services/*.yaml` + `charts/medikong-service` | service release |
+
+`service` repo는 Dockerfile과 image build/push만 소유한다. Kubernetes/Helm/Kong/Ingress 선언은 이 `gitops` repo가 소유한다.

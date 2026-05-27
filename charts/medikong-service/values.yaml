@@ -1,4 +1,4 @@
-environment: local
+environment: chart-default
 
 app:
   name: sample-service

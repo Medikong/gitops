@@ -69,4 +69,4 @@ if [ "${status_code}" -lt 200 ] || [ "${status_code}" -ge 300 ]; then
   exit 1
 fi
 
-printf "ok: patient CRUD smoke passed with patientId=%s\n" "$patient_id"
+printf "ok: patient CRUD scenario passed with patientId=%s\n" "$patient_id"
