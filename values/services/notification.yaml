@@ -1,9 +1,9 @@
 app:
   name: notification-service
-  namespace: medical-notification
+  namespace: ticketing-notification
   labels:
-    medikong.io/service: notification
-    medikong.io/tier: api
+    ticketing.io/service: notification
+    ticketing.io/tier: api
 
 image:
   repository: notification-service
@@ -17,11 +17,19 @@ container:
     - name: MONGODB_DB_NAME
       value: notification_db
     - name: KAFKA_BOOTSTRAP_SERVERS
-      value: kafka.medical-messaging.svc.cluster.local:9092
-    - name: APPOINTMENT_CONFIRMED_TOPIC
-      value: appointment-confirmed
-    - name: PRESCRIPTION_ISSUED_TOPIC
-      value: prescription-issued
+      value: kafka.ticketing-messaging.svc.cluster.local:9092
+    - name: KAFKA_GROUP_ID
+      value: notification-service
+    - name: RESERVATION_CREATED_TOPIC
+      value: reservation-created
+    - name: RESERVATION_EXPIRED_TOPIC
+      value: reservation-expired
+    - name: PAYMENT_APPROVED_TOPIC
+      value: payment-approved
+    - name: PAYMENT_FAILED_TOPIC
+      value: payment-failed
+    - name: TICKET_ISSUED_TOPIC
+      value: ticket-issued
 
 service:
   port: 8084
@@ -32,7 +40,7 @@ ingress:
   name: notification-api
   className: kong
   annotations:
-    konghq.com/plugins: medikong-jwt,medikong-identity-headers,medikong-rate-limit-notifications,medikong-correlation-id,medikong-prometheus
+    konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-rate-limit-notifications,ticketing-correlation-id,ticketing-prometheus
   hosts:
     - host: ""
       paths:

@@ -1,0 +1,67 @@
+app:
+  name: ticket-service
+  namespace: ticketing-ticket
+  labels:
+    ticketing.io/service: ticket
+    ticketing.io/tier: api
+
+image:
+  repository: ticket-service
+  tag: dev
+
+container:
+  port: 8085
+  env:
+    - name: DATABASE_URL
+      value: postgresql+psycopg://user:password@ticket-db:5432/ticket_db
+    - name: KAFKA_BOOTSTRAP_SERVERS
+      value: kafka.ticketing-messaging.svc.cluster.local:9092
+    - name: KAFKA_GROUP_ID
+      value: ticket-service
+    - name: PAYMENT_APPROVED_TOPIC
+      value: payment-approved
+    - name: TICKET_ISSUED_TOPIC
+      value: ticket-issued
+    - name: AWS_REGION
+      value: ap-northeast-2
+    - name: S3_BUCKET
+      value: ticketing-tickets
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: ticket-service-secret
+          key: aws-access-key-id
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: ticket-service-secret
+          key: aws-secret-access-key
+
+service:
+  port: 8085
+  targetPort: http
+
+ingress:
+  enabled: true
+  name: ticket-api
+  className: kong
+  annotations:
+    konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-rate-limit-tickets,ticketing-correlation-id,ticketing-prometheus
+  hosts:
+    - host: ""
+      paths:
+        - path: /tickets
+          pathType: Prefix
+
+networkPolicy:
+  enabled: true
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kong
+      ports:
+        - protocol: TCP
+          port: 8085
