@@ -24,17 +24,48 @@ service:
 
 ingress:
   enabled: true
-  name: concert-api
   className: kong
-  annotations:
-    konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-rate-limit-concerts,ticketing-correlation-id,ticketing-prometheus
-  hosts:
-    - host: ""
-      paths:
-        - path: /concerts
-          pathType: Prefix
-        - path: /performances
-          pathType: Prefix
+  objects:
+    - name: concert-public-api
+      annotations:
+        konghq.com/plugins: ticketing-rate-limit-concerts,ticketing-correlation-id,ticketing-prometheus
+      hosts:
+        - host: ""
+          paths:
+            - path: /concerts
+              pathType: Prefix
+            - path: /performances
+              pathType: Prefix
+    - name: concert-provider-api
+      annotations:
+        konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-role-provider,ticketing-rate-limit-concerts,ticketing-correlation-id,ticketing-prometheus
+        konghq.com/regex-priority: "100"
+      hosts:
+        - host: ""
+          paths:
+            - path: /provider/venues
+              pathType: Prefix
+            - path: /~/provider/concerts$
+              pathType: ImplementationSpecific
+            - path: /~/provider/concerts/[^/]+$
+              pathType: ImplementationSpecific
+            - path: /~/provider/concerts/[^/]+/(showtimes|sale-policy|open-request|review-status)$
+              pathType: ImplementationSpecific
+            - path: /~/provider/showtimes/[^/]+$
+              pathType: ImplementationSpecific
+            - path: /~/provider/showtimes/[^/]+/(seat-map|seat-inventory|seat-grades|hold-seat-requests)$
+              pathType: ImplementationSpecific
+    - name: concert-admin-api
+      annotations:
+        konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-role-admin,ticketing-rate-limit-concerts,ticketing-correlation-id,ticketing-prometheus
+        konghq.com/regex-priority: "100"
+      hosts:
+        - host: ""
+          paths:
+            - path: /admin/concert-requests
+              pathType: Prefix
+            - path: /~/admin/concerts/[^/]+/(open-schedule|sale-policy|sale-policy/approve|sale-policy/reject|canceled-seat-reopen-policy)$
+              pathType: ImplementationSpecific
 
 networkPolicy:
   enabled: true

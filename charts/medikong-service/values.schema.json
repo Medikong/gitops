@@ -94,6 +94,38 @@
         "name": { "type": "string" },
         "className": { "type": "string" },
         "annotations": { "type": "object" },
+        "objects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "hosts"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "className": { "type": "string" },
+              "annotations": { "type": "object" },
+              "hosts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "host": { "type": "string" },
+                    "paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["path", "pathType"],
+                        "properties": {
+                          "path": { "type": "string", "minLength": 1 },
+                          "pathType": { "type": "string", "minLength": 1 }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "hosts": { "type": "array" }
       }
     },

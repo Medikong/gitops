@@ -10,6 +10,18 @@ plugin: pre-function
 config:
   access:
     - |
+      local gateway_headers = {
+        "X-User-Id",
+        "X-User-Email",
+        "X-User-Role",
+        "X-Token-Id",
+        "X-Provider-Id"
+      }
+
+      for _, header in ipairs(gateway_headers) do
+        kong.service.request.clear_header(header)
+      end
+
       local auth = kong.request.get_header("authorization")
       if not auth then
         return
@@ -45,11 +57,26 @@ config:
       end
 
       local sub = claim_value("sub")
+      local email = claim_value("email")
       local role = claim_value("role")
+      local token_id = claim_value("jti")
+      local provider_id = claim_value("providerId") or claim_value("provider_id")
 
       if sub then
         kong.service.request.set_header("X-User-Id", tostring(sub))
       end
+      if email then
+        kong.service.request.set_header("X-User-Email", tostring(email))
+      end
       if role then
-        kong.service.request.set_header("X-User-Role", tostring(role))
+        role = string.upper(tostring(role))
+        kong.service.request.set_header("X-User-Role", role)
+      end
+      if token_id then
+        kong.service.request.set_header("X-Token-Id", tostring(token_id))
+      end
+      if provider_id then
+        kong.service.request.set_header("X-Provider-Id", tostring(provider_id))
+      elseif role == "PROVIDER" and sub then
+        kong.service.request.set_header("X-Provider-Id", tostring(sub))
       end

@@ -17,10 +17,6 @@ container:
   env:
     - name: DATABASE_URL
       value: postgresql+psycopg://user:password@payment-db:5432/payment_db
-    - name: JWT_SECRET
-      value: ticketing-dev-secret
-    - name: JWT_ISSUER
-      value: auth-service
 
 service:
   port: 8080
@@ -28,17 +24,34 @@ service:
 
 ingress:
   enabled: true
-  name: payment-api
   className: kong
-  annotations:
-    konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-rate-limit-payments,ticketing-correlation-id,ticketing-prometheus
-  hosts:
-    - host: ""
-      paths:
-        - path: /payments
-          pathType: Prefix
-        - path: /provider/settlements
-          pathType: Prefix
+  objects:
+    - name: payment-customer-api
+      annotations:
+        konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-role-customer,ticketing-rate-limit-payments,ticketing-correlation-id,ticketing-prometheus
+      hosts:
+        - host: ""
+          paths:
+            - path: /payments
+              pathType: Prefix
+    - name: payment-provider-api
+      annotations:
+        konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-role-provider,ticketing-rate-limit-payments,ticketing-correlation-id,ticketing-prometheus
+        konghq.com/regex-priority: "100"
+      hosts:
+        - host: ""
+          paths:
+            - path: /~/provider/concerts/[^/]+/settlement-basis$
+              pathType: ImplementationSpecific
+    - name: payment-admin-api
+      annotations:
+        konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-role-admin,ticketing-rate-limit-payments,ticketing-correlation-id,ticketing-prometheus
+        konghq.com/regex-priority: "100"
+      hosts:
+        - host: ""
+          paths:
+            - path: /~/admin/concerts/[^/]+/settlement-basis$
+              pathType: ImplementationSpecific
 
 networkPolicy:
   enabled: true

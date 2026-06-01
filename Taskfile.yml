@@ -93,7 +93,9 @@ tasks:
         }
         pids=""
         for service_file in values/services/*.yaml; do
-          service="$(basename "${service_file}" .yaml)"
+          service="${service_file##*/}"
+          service="${service##*\\}"
+          service="${service%.yaml}"
           namespace="$(yaml_section_field "${service_file}" app namespace)"
           release="${service}-{{.LOCAL_DOCKER_DESKTOP_RELEASE_SUFFIX}}"
           (
@@ -272,7 +274,9 @@ tasks:
           image_registry="${image_registry%/}/${image_namespace#/}"
         fi
         for service_file in values/services/*.yaml; do
-          service="$(basename "${service_file}" .yaml)"
+          service="${service_file##*/}"
+          service="${service##*\\}"
+          service="${service%.yaml}"
           {{.HELM}} template "${service}-{{.LOCAL_DOCKER_DESKTOP_ENV}}-dev" {{.SERVICE_CHART}} \
             -f {{.VALUES_BASE}} \
             -f values/env/{{.LOCAL_DOCKER_DESKTOP_ENV}}.yaml \
@@ -521,7 +525,9 @@ tasks:
           ' "$1"
         }
         for service_file in values/services/*.yaml; do
-          service="$(basename "${service_file}" .yaml)"
+          service="${service_file##*/}"
+          service="${service##*\\}"
+          service="${service%.yaml}"
           namespace="$(app_field "${service_file}" namespace)"
           release="${service}-{{.LOCAL_DOCKER_DESKTOP_RELEASE_SUFFIX}}"
           {{.HELM}} uninstall "${release}" --namespace "${namespace}" --ignore-not-found
@@ -589,7 +595,9 @@ tasks:
       - |
         set -eu
         for service_file in values/services/*.yaml; do
-          service="$(basename "${service_file}" .yaml)"
+          service="${service_file##*/}"
+          service="${service##*\\}"
+          service="${service%.yaml}"
           for env in {{.ENVIRONMENTS}}; do
             extra_values=""
             if [ -f "values/overrides/${env}/${service}.yaml" ]; then
@@ -635,7 +643,9 @@ tasks:
           exit 2
         fi
         for service_file in values/services/*.yaml; do
-          service="$(basename "${service_file}" .yaml)"
+          service="${service_file##*/}"
+          service="${service##*\\}"
+          service="${service%.yaml}"
           task helm:template:one SERVICE="${service}" ENV="${env}"
         done
 
@@ -674,7 +684,9 @@ tasks:
       - |
         set -eu
         for service_file in values/services/*.yaml; do
-          service="$(basename "${service_file}" .yaml)"
+          service="${service_file##*/}"
+          service="${service##*\\}"
+          service="${service%.yaml}"
           for scenario in {{.AWS_SCENARIOS}}; do
             {{.HELM}} template "${service}-aws-scenario-${scenario}" {{.SERVICE_CHART}} \
               -f {{.VALUES_BASE}} \
@@ -712,7 +724,9 @@ tasks:
           exit 0
         fi
         for service_file in values/services/*.yaml; do
-          service="$(basename "${service_file}" .yaml)"
+          service="${service_file##*/}"
+          service="${service##*\\}"
+          service="${service%.yaml}"
           {{.HELM}} template "${service}-aws-scenario-${scenario}" {{.SERVICE_CHART}} \
             -f {{.VALUES_BASE}} \
             -f values/scenarios/aws/base.yaml \

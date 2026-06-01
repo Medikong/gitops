@@ -24,15 +24,36 @@ service:
 
 ingress:
   enabled: true
-  name: reservation-api
   className: kong
-  annotations:
-    konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-rate-limit-reservations,ticketing-correlation-id,ticketing-prometheus
-  hosts:
-    - host: ""
-      paths:
-        - path: /reservations
-          pathType: Prefix
+  objects:
+    - name: reservation-customer-api
+      annotations:
+        konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-role-customer,ticketing-rate-limit-reservations,ticketing-correlation-id,ticketing-prometheus
+      hosts:
+        - host: ""
+          paths:
+            - path: /reservations
+              pathType: Prefix
+    - name: reservation-provider-api
+      annotations:
+        konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-role-provider,ticketing-rate-limit-reservations,ticketing-correlation-id,ticketing-prometheus
+        konghq.com/regex-priority: "100"
+      hosts:
+        - host: ""
+          paths:
+            - path: /~/provider/concerts/[^/]+/sales$
+              pathType: ImplementationSpecific
+            - path: /~/provider/showtimes/[^/]+/sales$
+              pathType: ImplementationSpecific
+    - name: reservation-admin-api
+      annotations:
+        konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-role-admin,ticketing-rate-limit-reservations,ticketing-correlation-id,ticketing-prometheus
+        konghq.com/regex-priority: "100"
+      hosts:
+        - host: ""
+          paths:
+            - path: /~/admin/concerts/[^/]+/(sales|sales/start|sales/pause|sales/resume|queue-policy|traffic-policy)$
+              pathType: ImplementationSpecific
 
 networkPolicy:
   enabled: true

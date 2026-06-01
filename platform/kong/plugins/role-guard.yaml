@@ -1,0 +1,137 @@
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: ticketing-role-customer
+  annotations:
+    kubernetes.io/ingress.class: kong
+  labels:
+    app.kubernetes.io/part-of: medikong
+plugin: post-function
+config:
+  access:
+    - |
+      local allowed = { CUSTOMER = true }
+
+      local auth = kong.request.get_header("authorization")
+      if not auth then
+        return kong.response.exit(401, { message = "authentication required" })
+      end
+
+      local token = auth:match("[Bb]earer%s+(.+)")
+      if not token then
+        return kong.response.exit(401, { message = "bearer token required" })
+      end
+
+      local payload_b64 = token:match("^[^.]+%.([^.]+)%.")
+      if not payload_b64 then
+        return kong.response.exit(401, { message = "invalid token payload" })
+      end
+
+      payload_b64 = payload_b64:gsub("-", "+"):gsub("_", "/")
+      local padding = #payload_b64 % 4
+      if padding > 0 then
+        payload_b64 = payload_b64 .. string.rep("=", 4 - padding)
+      end
+
+      local payload_json = ngx.decode_base64(payload_b64)
+      if not payload_json then
+        return kong.response.exit(401, { message = "invalid token payload" })
+      end
+
+      local role = payload_json:match('"role"%s*:%s*"([^"]*)"')
+      role = role and string.upper(tostring(role))
+      if not role or not allowed[role] then
+        return kong.response.exit(403, { message = "customer role required" })
+      end
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: ticketing-role-provider
+  annotations:
+    kubernetes.io/ingress.class: kong
+  labels:
+    app.kubernetes.io/part-of: medikong
+plugin: post-function
+config:
+  access:
+    - |
+      local allowed = { PROVIDER = true, ADMIN = true }
+
+      local auth = kong.request.get_header("authorization")
+      if not auth then
+        return kong.response.exit(401, { message = "authentication required" })
+      end
+
+      local token = auth:match("[Bb]earer%s+(.+)")
+      if not token then
+        return kong.response.exit(401, { message = "bearer token required" })
+      end
+
+      local payload_b64 = token:match("^[^.]+%.([^.]+)%.")
+      if not payload_b64 then
+        return kong.response.exit(401, { message = "invalid token payload" })
+      end
+
+      payload_b64 = payload_b64:gsub("-", "+"):gsub("_", "/")
+      local padding = #payload_b64 % 4
+      if padding > 0 then
+        payload_b64 = payload_b64 .. string.rep("=", 4 - padding)
+      end
+
+      local payload_json = ngx.decode_base64(payload_b64)
+      if not payload_json then
+        return kong.response.exit(401, { message = "invalid token payload" })
+      end
+
+      local role = payload_json:match('"role"%s*:%s*"([^"]*)"')
+      role = role and string.upper(tostring(role))
+      if not role or not allowed[role] then
+        return kong.response.exit(403, { message = "provider role required" })
+      end
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: ticketing-role-admin
+  annotations:
+    kubernetes.io/ingress.class: kong
+  labels:
+    app.kubernetes.io/part-of: medikong
+plugin: post-function
+config:
+  access:
+    - |
+      local allowed = { ADMIN = true }
+
+      local auth = kong.request.get_header("authorization")
+      if not auth then
+        return kong.response.exit(401, { message = "authentication required" })
+      end
+
+      local token = auth:match("[Bb]earer%s+(.+)")
+      if not token then
+        return kong.response.exit(401, { message = "bearer token required" })
+      end
+
+      local payload_b64 = token:match("^[^.]+%.([^.]+)%.")
+      if not payload_b64 then
+        return kong.response.exit(401, { message = "invalid token payload" })
+      end
+
+      payload_b64 = payload_b64:gsub("-", "+"):gsub("_", "/")
+      local padding = #payload_b64 % 4
+      if padding > 0 then
+        payload_b64 = payload_b64 .. string.rep("=", 4 - padding)
+      end
+
+      local payload_json = ngx.decode_base64(payload_b64)
+      if not payload_json then
+        return kong.response.exit(401, { message = "invalid token payload" })
+      end
+
+      local role = payload_json:match('"role"%s*:%s*"([^"]*)"')
+      role = role and string.upper(tostring(role))
+      if not role or not allowed[role] then
+        return kong.response.exit(403, { message = "admin role required" })
+      end

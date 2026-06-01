@@ -1,4 +1,43 @@
 {{- if .Values.ingress.enabled }}
+{{- if .Values.ingress.objects }}
+{{- range .Values.ingress.objects }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ required "ingress.objects[].name is required" .name | quote }}
+  namespace: {{ $.Values.app.namespace | quote }}
+  labels:
+    app.kubernetes.io/name: {{ $.Values.app.name | quote }}
+    app.kubernetes.io/instance: {{ $.Release.Name | quote }}
+    app.kubernetes.io/part-of: medikong
+{{- with .annotations }}
+  annotations:
+{{ toYaml . | nindent 4 }}
+{{- end }}
+spec:
+{{- with (default $.Values.ingress.className .className) }}
+  ingressClassName: {{ . | quote }}
+{{- end }}
+  rules:
+{{- range .hosts }}
+    -{{- if .host }}
+      host: {{ .host | quote }}
+{{- end }}
+      http:
+        paths:
+{{- range .paths }}
+          - path: {{ .path | quote }}
+            pathType: {{ .pathType | quote }}
+            backend:
+              service:
+                name: {{ $.Values.app.name | quote }}
+                port:
+                  number: {{ $.Values.service.port }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- else }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -18,7 +57,9 @@ spec:
 {{- end }}
   rules:
 {{- range .Values.ingress.hosts }}
-    - {{- if .host }} host: {{ .host | quote }}{{- end }}
+    -{{- if .host }}
+      host: {{ .host | quote }}
+{{- end }}
       http:
         paths:
 {{- range .paths }}
@@ -29,6 +70,7 @@ spec:
                 name: {{ $.Values.app.name | quote }}
                 port:
                   number: {{ $.Values.service.port }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

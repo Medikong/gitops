@@ -32,15 +32,16 @@ service:
 
 ingress:
   enabled: true
-  name: auth-api
   className: kong
-  annotations:
-    konghq.com/plugins: ticketing-correlation-id,ticketing-prometheus
-  hosts:
-    - host: ""
-      paths:
-        - path: /auth
-          pathType: Prefix
+  objects:
+    - name: auth-api
+      annotations:
+        konghq.com/plugins: ticketing-correlation-id,ticketing-prometheus
+      hosts:
+        - host: ""
+          paths:
+            - path: /auth
+              pathType: Prefix
 
 networkPolicy:
   enabled: true
