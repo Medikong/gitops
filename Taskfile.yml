@@ -468,7 +468,7 @@ tasks:
         service='{{.KONG_PROXY_SERVICE}}'
         for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
           address="$({{.KUBECTL}} -n "${namespace}" get svc "${service}" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
-          if [ -n "${address}" ] && curl -sS --max-time 2 -o /dev/null http://localhost/; then
+          if [ -n "${address}" ] && curl -fsS --max-time 2 http://localhost/ >/dev/null; then
             printf 'Kong proxy is available at http://localhost/ (LoadBalancer IP: %s)\n' "${address}"
             exit 0
           fi
