@@ -111,3 +111,6 @@ serviceMonitor:
   interval: 30s
   path: /metrics
   port: http
+  networkPolicy:
+    enabled: true
+    namespace: monitoring

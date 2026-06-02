@@ -6,7 +6,8 @@
 | --- | --- | --- |
 | Namespace | `platform/namespaces` | 운영 경로 |
 | Kong Gateway | `platform/kong` | `archive/k8s-kustomize/kong`에서 이식 필요 |
-| Observability | `platform/observability` | `cluster/stacks/observability`와 함께 이식 필요 |
+| Monitoring | `platform/monitoring` | `monitoring` namespace 기준 Prometheus 기본 스택 운영 경로 |
+| Observability | `platform/observability` | Loki, Alloy, Tempo 등 후속 observability 이식 후보 |
 | Policy | `platform/policies` | cluster-level 정책 추가 예정 |
 | Data | `platform/data` | DB/Kafka 초기 dev 리소스 이식 필요 |
 
