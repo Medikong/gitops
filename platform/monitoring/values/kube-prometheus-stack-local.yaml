@@ -1,0 +1,116 @@
+crds:
+  enabled: true
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+defaultRules:
+  create: true
+
+grafana:
+  enabled: true
+  adminUser: admin
+  adminPassword: prom-local
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: monitoring
+      provider:
+        allowUiUpdates: false
+        disableDelete: false
+        foldersFromFilesStructure: true
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 25m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+prometheus:
+  prometheusSpec:
+    replicas: 1
+    retention: 6h
+    serviceMonitorSelector:
+      matchLabels:
+        release: kube-prometheus-stack
+    serviceMonitorNamespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+            - monitoring
+            - ticketing-auth
+            - ticketing-concert
+            - ticketing-notification
+            - ticketing-payment
+            - ticketing-reservation
+            - ticketing-ticket
+    podMonitorSelector:
+      matchLabels:
+        release: kube-prometheus-stack
+    podMonitorNamespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+            - monitoring
+            - ticketing-auth
+            - ticketing-concert
+            - ticketing-notification
+            - ticketing-payment
+            - ticketing-reservation
+            - ticketing-ticket
+    ruleSelector:
+      matchLabels:
+        release: kube-prometheus-stack
+    ruleNamespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+            - monitoring
+            - ticketing-auth
+            - ticketing-concert
+            - ticketing-notification
+            - ticketing-payment
+            - ticketing-reservation
+            - ticketing-ticket
+    resources:
+      requests:
+        cpu: 50m
+        memory: 256Mi
+      limits:
+        cpu: 300m
+        memory: 768Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi

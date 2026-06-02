@@ -15,6 +15,7 @@ vars:
   DEV_IMAGE_NAMESPACE: '{{default "" .DEV_IMAGE_NAMESPACE}}'
   DEV_IMAGE_TAG: '{{default "dev" .DEV_IMAGE_TAG}}'
   DEV_ROLLOUT_ID: '{{default "" .DEV_ROLLOUT_ID}}'
+  DEV_SERVICES: '{{default "auth concert notification payment reservation ticket" .DEV_SERVICES}}'
   KONG_CHART: '{{default "kong/kong" .KONG_CHART}}'
   KONG_CHART_VERSION: '{{default "3.2.0" .KONG_CHART_VERSION}}'
   KONG_NAMESPACE: '{{default "kong" .KONG_NAMESPACE}}'
@@ -38,6 +39,8 @@ tasks:
       - platform:render
       - kong:render
       - argo:validate
+    cmds:
+      - task --taskfile platform/monitoring/Taskfile.yml render
 
   render:
     deps:
@@ -45,22 +48,31 @@ tasks:
       - platform:render
 
   dev:
-    desc: service image build/push 후 Docker Desktop Kubernetes에 모든 서비스 Helm release를 배포합니다.
+    desc: Prometheus stack과 로컬 dev 대상 서비스 Helm release를 Docker Desktop Kubernetes에 배포합니다.
     cmds:
-      - task dev:check
-      - task dev:images
-      - task dev:platform
-      - task dev:services
+      - task: dev:check
+      - task --taskfile platform/monitoring/Taskfile.yml up
+      - task: dev:platform
+      - task: dev:images
+      - task: dev:services
+
+  dev:monitored:
+    internal: true
+    desc: Docker Desktop dev 모니터링 포함 배포를 실행합니다. task dev와 같은 경로입니다.
+    cmds:
+      - task: dev
 
   dev:platform:
+    internal: true
     desc: Docker Desktop dev의 namespace, data, Kong 기반 리소스를 준비합니다.
     cmds:
       - '{{.KUBECTL}} apply -k platform/namespaces'
-      - task dev:data
-      - task dev:kong
+      - task: dev:data
+      - task: dev:kong
 
   dev:services:
-    desc: Docker Desktop dev에 모든 서비스 Helm release를 병렬 배포하고 병렬로 rollout을 기다립니다.
+    internal: true
+    desc: Docker Desktop dev에 로컬 dev 대상 서비스 Helm release를 병렬 배포하고 병렬로 rollout을 기다립니다.
     cmds:
       - |
         set -eu
@@ -92,7 +104,12 @@ tasks:
           ' "$1"
         }
         pids=""
-        for service_file in values/services/*.yaml; do
+        for service in {{.DEV_SERVICES}}; do
+          service_file="values/services/${service}.yaml"
+          if [ ! -f "${service_file}" ]; then
+            printf 'Unknown DEV_SERVICES entry: %s (expected values/services/%s.yaml).\n' "${service}" "${service}" >&2
+            exit 2
+          fi
           service="$(basename "${service_file}" .yaml)"
           namespace="$(yaml_section_field "${service_file}" app namespace)"
           release="${service}-{{.LOCAL_DOCKER_DESKTOP_RELEASE_SUFFIX}}"
@@ -120,7 +137,12 @@ tasks:
           exit 1
         fi
         pids=""
-        for service_file in values/services/*.yaml; do
+        for service in {{.DEV_SERVICES}}; do
+          service_file="values/services/${service}.yaml"
+          if [ ! -f "${service_file}" ]; then
+            printf 'Unknown DEV_SERVICES entry: %s (expected values/services/%s.yaml).\n' "${service}" "${service}" >&2
+            exit 2
+          fi
           app_name="$(yaml_section_field "${service_file}" app name)"
           namespace="$(yaml_section_field "${service_file}" app namespace)"
           (
@@ -138,10 +160,20 @@ tasks:
           exit 1
         fi
 
+  dev:services:monitored:
+    internal: true
+    desc: Docker Desktop dev ServiceMonitor 상태를 확인합니다. 서비스 배포는 task dev:services와 같은 values를 사용합니다.
+    cmds:
+      - task: dev:services
+      - |
+        set -eu
+        {{.KUBECTL}} get servicemonitor --all-namespaces -l release={{.MONITORING_RELEASE}}
+
   dev:service:
+    internal: true
     desc: SERVICE=<name> 하나만 build/push 후 Docker Desktop dev에 Helm 배포합니다.
     cmds:
-      - task dev:registry
+      - task: dev:registry
       - |
         set -eu
         service='{{default "" .SERVICE}}'
@@ -194,19 +226,22 @@ tasks:
         app_name="$(yaml_section_field "${service_file}" app name)"
         image_repository="$(yaml_section_field "${service_file}" image repository)"
         release="${service}-{{.LOCAL_DOCKER_DESKTOP_RELEASE_SUFFIX}}"
-        if ! task --dir "${service_repo}" --dry app-image-push \
-          SERVICE="${image_repository}" \
+        if ! task --dir "${service_repo}" --dry app-images-push \
+          APP_IMAGE_SERVICES= \
+          DASHBOARD_SERVICE="${image_repository}" \
           IMAGE_REGISTRY="{{.DEV_REGISTRY}}" \
           IMAGE_NAMESPACE="{{.DEV_IMAGE_NAMESPACE}}" \
           IMAGE_TAG="{{.DEV_IMAGE_TAG}}" >/dev/null 2>&1; then
-          printf '%s\n' 'SERVICE_REPO Taskfile is missing required target: app-image-push' >&2
+          printf '%s\n' 'SERVICE_REPO Taskfile is missing required target: app-images-push' >&2
           exit 2
         fi
-        task --dir "${service_repo}" app-image-push \
-          SERVICE="${image_repository}" \
+        task --dir "${service_repo}" app-images-push \
+          APP_IMAGE_SERVICES= \
+          DASHBOARD_SERVICE="${image_repository}" \
           IMAGE_REGISTRY="{{.DEV_REGISTRY}}" \
           IMAGE_NAMESPACE="{{.DEV_IMAGE_NAMESPACE}}" \
           IMAGE_TAG="{{.DEV_IMAGE_TAG}}"
+        task --taskfile platform/monitoring/Taskfile.yml up
         {{.HELM}} upgrade --install "${release}" {{.SERVICE_CHART}} \
           --namespace "${namespace}" \
           --create-namespace \
@@ -220,6 +255,7 @@ tasks:
         {{.KUBECTL}} rollout status "deployment/${app_name}" -n "${namespace}" --timeout=180s
 
   dev:restart:
+    internal: true
     desc: SERVICE=<name> 하나만 명시적으로 rollout restart합니다.
     cmds:
       - |
@@ -260,10 +296,13 @@ tasks:
   dev:check:
     desc: Docker Desktop Kubernetes에 올릴 서비스 Helm release와 dev image override를 검증합니다.
     cmds:
-      - task helm:lint
-      - task platform:render
-      - task dev:kong:check
-      - task helm:template:env ENV={{.LOCAL_DOCKER_DESKTOP_ENV}}
+      - task: helm:lint
+      - task: platform:render
+      - task: dev:kong:check
+      - task --taskfile platform/monitoring/Taskfile.yml render
+      - task: helm:template:env
+        vars:
+          ENV: '{{.LOCAL_DOCKER_DESKTOP_ENV}}'
       - |
         set -eu
         image_registry='{{.DEV_REGISTRY}}'
@@ -284,6 +323,7 @@ tasks:
         done
 
   dev:registry:
+    internal: true
     desc: Docker Desktop dev registry를 준비하고 kindest-node containerd mirror를 설정합니다.
     cmds:
       - |
@@ -316,7 +356,6 @@ tasks:
         nodes="$(docker ps --filter ancestor=kindest/node -q)"
         if [ -z "${nodes}" ]; then
           printf '%s\n' 'No kindest/node containers found. Registry is running, but no node mirror was configured.'
-          task dev:registry:check
           exit 0
         fi
         for node in ${nodes}; do
@@ -328,9 +367,10 @@ tasks:
           docker network connect "${network}" "${container}" 2>/dev/null || true
           docker exec "${node}" sh -c "mkdir -p '/etc/containerd/certs.d/${registry}' && printf '%s\n' 'server = \"http://${registry}\"' '' '[host.\"http://${container}:5000\"]' '  capabilities = [\"pull\", \"resolve\"]' > '/etc/containerd/certs.d/${registry}/hosts.toml' && systemctl restart containerd"
         done
-        task dev:registry:check
+      - task: dev:registry:check
 
   dev:registry:check:
+    internal: true
     desc: Docker Desktop dev registry와 kindest-node mirror 설정을 확인합니다.
     cmds:
       - |
@@ -363,9 +403,10 @@ tasks:
         done
 
   dev:images:
-    desc: service repo의 공개 Taskfile 명령으로 Docker Desktop dev image를 build/push합니다.
+    internal: true
+    desc: service repo의 공개 Taskfile 명령으로 Docker Desktop dev 대상 서비스 image를 build/push합니다.
     cmds:
-      - task dev:registry
+      - task: dev:registry
       - |
         set -eu
         service_repo='{{.SERVICE_REPO}}'
@@ -377,21 +418,64 @@ tasks:
           printf 'SERVICE_REPO has no Taskfile.yml: %s\n' "${service_repo}" >&2
           exit 2
         fi
-        for target in app-images-build app-images-push; do
-          if ! task --dir "${service_repo}" --dry "${target}" \
-            IMAGE_REGISTRY="{{.DEV_REGISTRY}}" \
-            IMAGE_NAMESPACE="{{.DEV_IMAGE_NAMESPACE}}" \
-            IMAGE_TAG="{{.DEV_IMAGE_TAG}}" >/dev/null 2>&1; then
-            printf 'SERVICE_REPO Taskfile is missing required target: %s\n' "${target}" >&2
+        yaml_section_field() {
+          awk -v section="$2" -v wanted="$3" '
+            $1 == section ":" { in_section = 1; next }
+            in_section && /^[^[:space:]]/ { in_section = 0 }
+            in_section {
+              line = $0
+              sub(/^[[:space:]]+/, "", line)
+              key = line
+              sub(/:.*/, "", key)
+              if (key == wanted) {
+                sub(/^[^:]*:[[:space:]]*/, "", line)
+                gsub(/^"|"$/, "", line)
+                print line
+                exit
+              }
+            }
+          ' "$1"
+        }
+        image_services=""
+        for service in {{.DEV_SERVICES}}; do
+          service_file="values/services/${service}.yaml"
+          if [ ! -f "${service_file}" ]; then
+            printf 'Unknown DEV_SERVICES entry: %s (expected values/services/%s.yaml).\n' "${service}" "${service}" >&2
             exit 2
           fi
+          image_repository="$(yaml_section_field "${service_file}" image repository)"
+          if [ ! -f "${service_repo}/services/${image_repository}/Dockerfile" ] && [ ! -f "${service_repo}/${image_repository}/Dockerfile" ]; then
+            printf 'No local image source for DEV_SERVICES entry %s: %s\n' "${service}" "${image_repository}" >&2
+            exit 2
+          fi
+          image_services="${image_services} ${image_repository}"
         done
+        image_services="$(printf '%s\n' "${image_services}" | sed 's/^[[:space:]]*//')"
+        if [ -z "${image_services}" ]; then
+          printf '%s\n' 'DEV_SERVICES did not select any image repositories.' >&2
+          exit 2
+        fi
+        dashboard_service="${image_services%% *}"
+        app_image_services="${image_services#${dashboard_service}}"
+        app_image_services="$(printf '%s\n' "${app_image_services}" | sed 's/^[[:space:]]*//')"
+        if ! task --dir "${service_repo}" --dry app-images-push \
+          APP_IMAGE_SERVICES="${app_image_services}" \
+          DASHBOARD_SERVICE="${dashboard_service}" \
+          IMAGE_REGISTRY="{{.DEV_REGISTRY}}" \
+          IMAGE_NAMESPACE="{{.DEV_IMAGE_NAMESPACE}}" \
+          IMAGE_TAG="{{.DEV_IMAGE_TAG}}" >/dev/null 2>&1; then
+          printf '%s\n' 'SERVICE_REPO Taskfile is missing required target: app-images-push' >&2
+          exit 2
+        fi
         task --dir "${service_repo}" app-images-push \
+          APP_IMAGE_SERVICES="${app_image_services}" \
+          DASHBOARD_SERVICE="${dashboard_service}" \
           IMAGE_REGISTRY="{{.DEV_REGISTRY}}" \
           IMAGE_NAMESPACE="{{.DEV_IMAGE_NAMESPACE}}" \
           IMAGE_TAG="{{.DEV_IMAGE_TAG}}"
 
   dev:data:
+    internal: true
     desc: Docker Desktop dev에 필요한 DB와 Kafka를 배포하고 준비될 때까지 기다립니다.
     cmds:
       - |
@@ -427,35 +511,40 @@ tasks:
         {{.KUBECTL}} wait --for=condition=complete job/kafka-create-topics -n ticketing-messaging --timeout=180s
 
   kong:repo:
+    internal: true
     cmds:
       - '{{.HELM}} repo add kong https://charts.konghq.com --force-update >/dev/null'
       - '{{.HELM}} repo update kong >/dev/null'
 
   kong:render:
+    internal: true
     desc: Kong Helm chart와 platform/kong Kustomize 리소스를 렌더링합니다.
     cmds:
-      - task kong:repo
+      - task: kong:repo
       - '{{.HELM}} template {{.KONG_RELEASE}} {{.KONG_CHART}} --version {{.KONG_CHART_VERSION}} --namespace {{.KONG_NAMESPACE}} -f {{.KONG_VALUES}} >/dev/null'
       - '{{.KUBECTL}} kustomize platform/kong >/dev/null'
 
   dev:kong:check:
+    internal: true
     desc: Docker Desktop dev용 Kong chart values와 Kong shared resource 렌더링을 검증합니다.
     cmds:
-      - task kong:render
+      - task: kong:render
 
   dev:kong:
+    internal: true
     desc: Docker Desktop dev에 Kong Ingress Controller/Gateway와 공통 plugin/consumer 리소스를 배포합니다.
     cmds:
-      - task dev:kong:check
+      - task: dev:kong:check
       - '{{.KUBECTL}} apply -k platform/namespaces'
       - '{{.KUBECTL}} create namespace {{.KONG_NAMESPACE}} --dry-run=client -o yaml | {{.KUBECTL}} apply -f -'
       - '{{.HELM}} upgrade --install {{.KONG_RELEASE}} {{.KONG_CHART}} --version {{.KONG_CHART_VERSION}} --namespace {{.KONG_NAMESPACE}} --create-namespace -f {{.KONG_VALUES}} --wait --timeout=300s'
       - '{{.KUBECTL}} rollout status deployment/{{.KONG_RELEASE}}-kong -n {{.KONG_NAMESPACE}} --timeout=240s'
       - '{{.KUBECTL}} apply -k platform/kong'
       - '{{.KUBECTL}} get ingressclass kong >/dev/null'
-      - task dev:kong:proxy
+      - task: dev:kong:proxy
 
   dev:kong:proxy:
+    internal: true
     desc: Kong proxy LoadBalancer가 localhost에서 열렸는지 확인합니다.
     cmds:
       - |
@@ -471,10 +560,11 @@ tasks:
           sleep 1
         done
         {{.KUBECTL}} -n "${namespace}" get svc "${service}" >&2
-        printf '%s\n' 'Kong proxy LoadBalancer did not become reachable at http://localhost/.' >&2
-        exit 2
+        printf '%s\n' 'Kong proxy LoadBalancer is not reachable at http://localhost/; continuing local dev deployment.' >&2
+        printf 'Fallback: %s\n' 'kubectl -n kong port-forward svc/kong-kong-proxy 8080:80' >&2
 
   dev:kong:status:
+    internal: true
     desc: Kong IngressClass, controller/gateway, plugin/consumer 상태를 확인합니다.
     cmds:
       - '{{.KUBECTL}} get ingressclass kong'
@@ -483,6 +573,7 @@ tasks:
       - '{{.KUBECTL}} get kongconsumers.configuration.konghq.com -n ticketing-auth'
 
   dev:kong:down:
+    internal: true
     desc: Docker Desktop dev Kong 리소스를 정리합니다.
     cmds:
       - |
@@ -491,11 +582,13 @@ tasks:
         {{.HELM}} uninstall {{.KONG_RELEASE}} --namespace {{.KONG_NAMESPACE}} --ignore-not-found
 
   dev:status:
+    internal: true
     desc: Docker Desktop Kubernetes에 배포된 Medikong namespace와 Helm release 상태를 봅니다.
     cmds:
       - '{{.KUBECTL}} get namespaces -l app.kubernetes.io/part-of=medikong'
       - '{{.HELM}} list --all-namespaces --filter "{{.LOCAL_DOCKER_DESKTOP_RELEASE_SUFFIX}}"'
-      - task dev:kong:status
+      - task: dev:kong:status
+      - task --taskfile platform/monitoring/Taskfile.yml status
 
   dev:down:
     desc: Docker Desktop Kubernetes에 배포한 local Helm release와 Medikong namespace를 정리합니다.
@@ -526,7 +619,10 @@ tasks:
           release="${service}-{{.LOCAL_DOCKER_DESKTOP_RELEASE_SUFFIX}}"
           {{.HELM}} uninstall "${release}" --namespace "${namespace}" --ignore-not-found
         done
-        task dev:kong:down
+      - task --taskfile platform/monitoring/Taskfile.yml down
+      - task: dev:kong:down
+      - |
+        set -eu
         {{.KUBECTL}} delete -k platform/data --ignore-not-found=true
         {{.KUBECTL}} delete -k platform/namespaces --ignore-not-found=true
 
@@ -725,6 +821,7 @@ tasks:
       - '{{.KUBECTL}} kustomize platform/namespaces >/dev/null'
       - '{{.KUBECTL}} kustomize platform/data >/dev/null'
       - '{{.KUBECTL}} kustomize platform/kong >/dev/null'
+      - '{{.KUBECTL}} kustomize platform/monitoring >/dev/null'
 
   argo:validate:
     cmds:
@@ -740,7 +837,7 @@ tasks:
           done < "${file}"
           return 1
         }
-        for file in argo/*.yaml argo/applications/*/*.yaml argo/applications/*/services/*.yaml; do
+        for file in argo/*.yaml argo/applications/*/*.yaml argo/applications/*/services/*.yaml argo/applications/*/platform/*.yaml; do
           [ -e "${file}" ] || continue
           if [ ! -s "${file}" ]; then
             printf 'Empty Argo manifest: %s\n' "${file}" >&2

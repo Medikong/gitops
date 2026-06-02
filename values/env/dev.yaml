@@ -30,4 +30,4 @@ hpa:
   enabled: false
 
 serviceMonitor:
-  enabled: false
+  enabled: true
