@@ -41,17 +41,25 @@ tasks:
       - argo:validate
     cmds:
       - task --taskfile platform/monitoring/Taskfile.yml render
+      - task: observability:render
 
   render:
     deps:
       - helm:template:all
       - platform:render
 
+  observability:render:
+    desc: Tempo/Loki backend Helm chart를 렌더링합니다.
+    cmds:
+      - task --taskfile platform/observability/tempo/Taskfile.yml render
+      - task --taskfile platform/observability/loki/Taskfile.yml render
+
   dev:
-    desc: Prometheus stack과 로컬 dev 대상 서비스 Helm release를 Docker Desktop Kubernetes에 배포합니다.
+    desc: Prometheus/Grafana, Tempo/Loki, 로컬 dev 대상 서비스 Helm release를 Docker Desktop Kubernetes에 배포합니다.
     cmds:
       - task: dev:check
       - task --taskfile platform/monitoring/Taskfile.yml up
+      - task: dev:observability
       - task: dev:platform
       - task: dev:images
       - task: dev:services
@@ -61,6 +69,13 @@ tasks:
     desc: Docker Desktop dev 모니터링 포함 배포를 실행합니다. task dev와 같은 경로입니다.
     cmds:
       - task: dev
+
+  dev:observability:
+    internal: true
+    desc: Docker Desktop dev에 Tempo/Loki backend를 배포합니다.
+    cmds:
+      - task --taskfile platform/observability/tempo/Taskfile.yml up
+      - task --taskfile platform/observability/loki/Taskfile.yml up
 
   dev:platform:
     internal: true
@@ -300,6 +315,7 @@ tasks:
       - task: platform:render
       - task: dev:kong:check
       - task --taskfile platform/monitoring/Taskfile.yml render
+      - task: observability:render
       - task: helm:template:env
         vars:
           ENV: '{{.LOCAL_DOCKER_DESKTOP_ENV}}'
@@ -589,9 +605,11 @@ tasks:
       - '{{.HELM}} list --all-namespaces --filter "{{.LOCAL_DOCKER_DESKTOP_RELEASE_SUFFIX}}"'
       - task: dev:kong:status
       - task --taskfile platform/monitoring/Taskfile.yml status
+      - task --taskfile platform/observability/tempo/Taskfile.yml status
+      - task --taskfile platform/observability/loki/Taskfile.yml status
 
   dev:down:
-    desc: Docker Desktop Kubernetes에 배포한 local Helm release와 Medikong namespace를 정리합니다.
+    desc: Docker Desktop Kubernetes에 배포한 local Helm release, observability backend, Medikong namespace를 정리합니다.
     cmds:
       - |
         set -eu
@@ -619,6 +637,8 @@ tasks:
           release="${service}-{{.LOCAL_DOCKER_DESKTOP_RELEASE_SUFFIX}}"
           {{.HELM}} uninstall "${release}" --namespace "${namespace}" --ignore-not-found
         done
+      - task --taskfile platform/observability/loki/Taskfile.yml down
+      - task --taskfile platform/observability/tempo/Taskfile.yml down
       - task --taskfile platform/monitoring/Taskfile.yml down
       - task: dev:kong:down
       - |

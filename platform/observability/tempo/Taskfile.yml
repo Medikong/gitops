@@ -1,0 +1,43 @@
+version: "3"
+
+vars:
+  HELM: '{{default "helm" .HELM}}'
+  KUBECTL: '{{default "kubectl" .KUBECTL}}'
+  GITOPS_ROOT: '{{default "../../.." .GITOPS_ROOT}}'
+  OBSERVABILITY_NAMESPACE: '{{default "observability" .OBSERVABILITY_NAMESPACE}}'
+  TEMPO_RELEASE: '{{default "tempo" .TEMPO_RELEASE}}'
+  TEMPO_CHART: '{{default "grafana/tempo" .TEMPO_CHART}}'
+  TEMPO_CHART_REPO: '{{default "https://grafana.github.io/helm-charts" .TEMPO_CHART_REPO}}'
+  TEMPO_CHART_REPO_NAME: '{{default "grafana" .TEMPO_CHART_REPO_NAME}}'
+  TEMPO_CHART_VERSION: '{{default "1.24.4" .TEMPO_CHART_VERSION}}'
+  TEMPO_VALUES: '{{default "platform/observability/tempo/values/aws-dev.yaml" .TEMPO_VALUES}}'
+  TEMPO_LOCAL_VALUES: '{{default "platform/observability/tempo/values/local.yaml" .TEMPO_LOCAL_VALUES}}'
+
+tasks:
+  repo:
+    cmds:
+      - '{{.HELM}} repo add {{.TEMPO_CHART_REPO_NAME}} {{.TEMPO_CHART_REPO}} --force-update >/dev/null'
+      - '{{.HELM}} repo update {{.TEMPO_CHART_REPO_NAME}} >/dev/null'
+
+  render:
+    desc: Tempo aws-dev/local Helm values를 렌더링합니다.
+    cmds:
+      - task repo
+      - '{{.HELM}} template {{.TEMPO_RELEASE}} {{.TEMPO_CHART}} --version {{.TEMPO_CHART_VERSION}} --namespace {{.OBSERVABILITY_NAMESPACE}} -f {{.GITOPS_ROOT}}/{{.TEMPO_VALUES}} >/dev/null'
+      - '{{.HELM}} template {{.TEMPO_RELEASE}} {{.TEMPO_CHART}} --version {{.TEMPO_CHART_VERSION}} --namespace {{.OBSERVABILITY_NAMESPACE}} -f {{.GITOPS_ROOT}}/{{.TEMPO_LOCAL_VALUES}} >/dev/null'
+
+  up:
+    desc: Docker Desktop dev에 Tempo trace backend를 배포합니다.
+    cmds:
+      - task render
+      - '{{.HELM}} upgrade --install {{.TEMPO_RELEASE}} {{.TEMPO_CHART}} --version {{.TEMPO_CHART_VERSION}} --namespace {{.OBSERVABILITY_NAMESPACE}} --create-namespace -f {{.GITOPS_ROOT}}/{{.TEMPO_LOCAL_VALUES}} --wait --timeout=300s'
+
+  status:
+    desc: Tempo 리소스 상태를 표시합니다.
+    cmds:
+      - '{{.KUBECTL}} get pods,svc,statefulset,pvc -n {{.OBSERVABILITY_NAMESPACE}} -l app.kubernetes.io/name=tempo'
+
+  down:
+    desc: Docker Desktop dev Tempo release를 정리합니다.
+    cmds:
+      - '{{.HELM}} uninstall {{.TEMPO_RELEASE}} --namespace {{.OBSERVABILITY_NAMESPACE}} --ignore-not-found'

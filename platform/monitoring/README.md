@@ -6,6 +6,7 @@
 
 - `manifests/namespace.yaml`: `monitoring` namespace를 만든다.
 - `values/kube-prometheus-stack.yaml`: `prometheus-community/kube-prometheus-stack` values를 관리한다.
+- Grafana datasource는 이 values에서 함께 관리한다. Prometheus는 기본 datasource, Tempo/Loki는 `additionalDataSources`로 선언한다.
 - 서비스별 `ServiceMonitor`는 계속 `charts/medikong-service` release가 관리한다.
 
 ## Sync 순서
@@ -15,6 +16,7 @@
 3. `platform/monitoring` Kustomize source가 `monitoring` namespace를 만든다.
 4. `kube-prometheus-stack` Helm source가 Prometheus Operator CRD와 chart 리소스를 적용한다.
 5. 서비스 Application이 만든 `ServiceMonitor`는 `release: kube-prometheus-stack` label로 Prometheus에 선택된다.
+6. Tempo/Loki backend는 `platform/observability` Application들이 만든 service DNS로 연결된다.
 
 ## Secret
 
@@ -28,6 +30,28 @@ keys: admin-user, admin-password
 ## 기존 reference 경로
 
 `cluster/stacks/observability`는 Loki, Alloy, Tempo까지 포함한 수동 설치 reference로 유지한다. Prometheus 기본 스택의 GitOps 운영 경로는 `platform/monitoring`이다.
+
+## Grafana datasource
+
+Grafana는 `platform/monitoring`의 kube-prometheus-stack이 관리하므로 datasource 선언도 이 values에 둔다.
+
+```text
+Prometheus
+  - uid: prometheus
+  - kube-prometheus-stack 기본 datasource
+
+Tempo
+  - uid: tempo
+  - url: http://tempo.observability.svc.cluster.local:3200
+  - trace-to-logs는 Loki field 검색으로 연결
+
+Loki
+  - uid: loki
+  - url: http://loki.observability.svc.cluster.local:3100
+  - trace_id derived field에서 Tempo로 이동
+```
+
+`trace_id`, `request_id`, `user_id`, 업무 객체 ID는 Loki label이나 metric label로 올리지 않는다. Grafana 연결은 JSON log field와 Tempo trace ID 조회를 사용한다.
 
 ## Docker Desktop 로컬 테스트
 
@@ -70,7 +94,7 @@ ServiceMonitor 생성 여부는 다음 명령으로 확인한다.
 kubectl get servicemonitor --all-namespaces -l release=kube-prometheus-stack
 ```
 
-정리는 `task dev:down` 하나로 서비스 release, Prometheus stack, Kong, data, namespace를 정리한다.
+정리는 `task dev:down` 하나로 서비스 release, Tempo/Loki backend, Prometheus stack, Kong, data, namespace를 정리한다.
 
 ```bash
 task dev:down

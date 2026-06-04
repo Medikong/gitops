@@ -137,7 +137,7 @@ make scenario SCENARIO=hpa SERVICE=concert
 | `aws-dev` | 지속 검증용 클라우드 개발 환경 |
 | `aws-prod` | 운영 목표 환경 |
 
-`task dev`, `task dev:check`, `task dev:down`은 내부적으로 `dev` values와 `platform/kong/values-local.yaml`, `platform/monitoring/values/kube-prometheus-stack-local.yaml`을 사용한다. 개발자는 평소에 환경 파일명을 직접 넘기지 않아도 된다. `dev`는 로컬 개발에서도 분산 동작을 확인할 수 있도록 기본 replica를 2개로 두고, 백엔드 서비스별 `/metrics`가 Prometheus scrape 대상이 되도록 `ServiceMonitor`를 켠다.
+`task dev`, `task dev:check`, `task dev:down`은 내부적으로 `dev` values와 `platform/kong/values-local.yaml`, `platform/monitoring/values/kube-prometheus-stack-local.yaml`, `platform/observability/*/values/local.yaml`을 사용한다. 개발자는 평소에 환경 파일명을 직접 넘기지 않아도 된다. `dev`는 로컬 개발에서도 분산 동작을 확인할 수 있도록 기본 replica를 2개로 두고, 백엔드 서비스별 `/metrics`가 Prometheus scrape 대상이 되도록 `ServiceMonitor`를 켠다. Tempo/Loki backend도 `task dev` 과정에서 함께 설치된다.
 
 Docker Desktop 개발 루프는 VM/kubeadm lab registry인 `10.10.10.10:5000`을 쓰지 않는다. 기본 dev registry는 Docker Desktop host에서 push 가능한 `localhost:5001`이고, kindest-node 기반 multi-node 클러스터에서는 Taskfile이 node containerd mirror를 설정해서 같은 image reference를 pull하게 한다. 이 repo는 `DEV_SERVICES`에 있는 백엔드 서비스만 service repo의 `task app-images-push IMAGE_REGISTRY=<registry> IMAGE_TAG=<tag>` 표면으로 빌드한다.
 
@@ -209,8 +209,9 @@ gitops/
 - Helm values는 `values/base.yaml`, `values/env/<env>.yaml`, `values/services/<service>.yaml`, `values/overrides/<env>/<service>.yaml` 순서로 합성한다.
 - `charts/medikong-service`는 서비스별 Helm release의 공통 chart다.
 - `platform/namespaces`는 서비스 release보다 먼저 렌더링되는 공통 기반이다.
-- `platform/monitoring`은 `monitoring` namespace 기준 `kube-prometheus-stack` GitOps 운영 경로다.
+- `platform/monitoring`은 `monitoring` namespace 기준 `kube-prometheus-stack` GitOps 운영 경로이며, Grafana datasource 선언을 함께 관리한다.
+- `platform/observability`는 `observability` namespace 기준 Tempo/Loki backend 운영 경로다.
 - `task aws:bootstrap`은 서비스 Helm release를 직접 올리지 않고 Argo CD Application 진입점을 적용한다.
-- Kong, observability, policy, data 리소스의 이식 후보는 `docs/architecture/k8s-kustomize-archive-inventory.md`에 정리한다.
+- Kong, policy, data 리소스의 이식 후보는 `docs/architecture/k8s-kustomize-archive-inventory.md`에 정리한다.
 - `cluster/ansible`에는 inventory를 포함하지 않는다. inventory와 VM topology는 infra repo에서 준비한 값을 사용한다.
 - live cluster에 직접 적용하는 명령은 명시적으로 실행할 때만 사용한다.
