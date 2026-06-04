@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - argocd/istio-base.yaml
+  - argocd/istiod.yaml
+  - argocd/kiali.yaml

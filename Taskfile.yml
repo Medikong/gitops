@@ -22,6 +22,7 @@ vars:
   KONG_VALUES: '{{default "platform/kong/values-local.yaml" .KONG_VALUES}}'
   KONG_PROXY_SERVICE: '{{default "kong-kong-proxy" .KONG_PROXY_SERVICE}}'
   AWS_ARGO_ROOT: '{{default "argo/applications/aws-dev/root.yaml" .AWS_ARGO_ROOT}}'
+  ISTIO_PLATFORM: '{{default "platform/istio" .ISTIO_PLATFORM}}'
 
 tasks:
   default:
@@ -442,6 +443,11 @@ tasks:
       - '{{.HELM}} template {{.KONG_RELEASE}} {{.KONG_CHART}} --version {{.KONG_CHART_VERSION}} --namespace {{.KONG_NAMESPACE}} -f {{.KONG_VALUES}} >/dev/null'
       - '{{.KUBECTL}} kustomize platform/kong >/dev/null'
 
+  istio:render:
+    desc: Istio platform ArgoCD Application 레이어를 렌더링합니다.
+    cmds:
+      - '{{.KUBECTL}} kustomize {{.ISTIO_PLATFORM}} >/dev/null'
+
   dev:kong:check:
     desc: Docker Desktop dev용 Kong chart values와 Kong shared resource 렌더링을 검증합니다.
     cmds:
@@ -739,6 +745,7 @@ tasks:
       - '{{.KUBECTL}} kustomize platform/namespaces >/dev/null'
       - '{{.KUBECTL}} kustomize platform/data >/dev/null'
       - '{{.KUBECTL}} kustomize platform/kong >/dev/null'
+      - task istio:render
 
   argo:validate:
     cmds:
@@ -754,7 +761,7 @@ tasks:
           done < "${file}"
           return 1
         }
-        for file in argo/*.yaml argo/applications/*/*.yaml argo/applications/*/services/*.yaml; do
+        for file in argo/*.yaml argo/applications/*/*.yaml argo/applications/*/platform/*.yaml argo/applications/*/services/*.yaml platform/istio/argocd/*.yaml; do
           [ -e "${file}" ] || continue
           if [ ! -s "${file}" ]; then
             printf 'Empty Argo manifest: %s\n' "${file}" >&2

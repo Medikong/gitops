@@ -8,7 +8,10 @@ spec:
   source:
     repoURL: https://github.com/Medikong/gitops.git
     targetRevision: HEAD
-    path: argo/applications/aws-dev/services
+    path: argo/applications/aws-dev
+    directory:
+      recurse: true
+      exclude: root.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
