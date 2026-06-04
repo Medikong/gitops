@@ -8,7 +8,7 @@
 - `values/local.yaml`: Docker Desktop 로컬 렌더링과 수동 dev 배포용 values다.
 - `Taskfile.yml`: Helm chart 렌더링과 선택적 로컬 배포 명령을 둔다.
 
-OpenTelemetry Collector의 OTLP receiver, processor, exporter, tail sampling pipeline은 `gitops#18` 범위다. 이 디렉터리는 Collector가 보낼 trace backend와 Grafana 조회 연결 기준만 다룬다.
+OpenTelemetry Collector의 OTLP receiver, processor, exporter는 `platform/observability/collector`의 `gitops#18` 범위다. 이 디렉터리는 Collector가 보낼 trace backend와 Grafana 조회 연결 기준만 다룬다.
 
 ## 배포 기준
 

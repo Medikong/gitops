@@ -14,9 +14,9 @@ platform/monitoring
   - Grafana datasource 선언
 
 platform/observability
+  - OpenTelemetry Collector trace pipeline
   - Tempo trace backend
   - Loki log backend
-  - 후속 OpenTelemetry Collector/agent backend 연결 기준
 ```
 
 ## 컴포넌트
@@ -25,6 +25,12 @@ platform/observability
 tempo/
   - Tempo Helm values
   - trace retention/storage/resource 기준
+  - 로컬 render Taskfile
+
+collector/
+  - OpenTelemetry Collector Helm values
+  - OTLP receiver와 Tempo exporter trace pipeline
+  - ServiceMonitor/NetworkPolicy 기준
   - 로컬 render Taskfile
 
 loki/
@@ -64,7 +70,7 @@ audit log
   -> 별도 검색/증적 파이프라인
 ```
 
-이번 기반 작업은 Tempo, Loki, Grafana datasource 선언까지다. OpenTelemetry Collector OTLP receiver/pipeline, filelog receiver, tail sampling은 후속 작업으로 분리한다.
+이번 Collector 기반 작업은 trace용 OTLP receiver와 Tempo exporter pipeline까지만 다룬다. Loki filelog receiver, metric scrape, audit log pipeline, tail sampling 정책은 별도 작업으로 분리한다.
 
 ## Argo CD
 
@@ -74,6 +80,7 @@ aws-dev platform Application은 다음 순서로 붙인다.
 monitoring-aws-dev   sync-wave -20
 tempo-aws-dev        sync-wave -18
 loki-aws-dev         sync-wave -18
+opentelemetry-collector-aws-dev  sync-wave -17
 service applications service path
 ```
 
@@ -102,16 +109,20 @@ ECR mirror 방식
 
 ```text
 platform/observability/tempo/values/aws-dev.yaml
+platform/observability/collector/values/aws-dev.yaml
 platform/observability/loki/values/aws-dev.yaml
 ```
 
-각 values 파일의 `imageMirror.images`가 CI 미러링 기준이다. 새 관측성 컴포넌트를 추가할 때는 해당 컴포넌트의 `values/<환경>.yaml`에 `imageMirror.images`를 같이 추가한다. 그러면 workflow가 `platform/observability/*/values/<환경>.yaml`를 스캔해서 자동으로 미러링 대상에 포함한다.
+각 values 파일의 `imageMirror.images`가 CI 미러링 기준이다. Helm chart schema가 외부 key를 허용하지 않는 컴포넌트는 `image-mirror/<환경>.yaml`에 같은 구조로 둔다. workflow는 `platform/observability/*/values/<환경>.yaml`와 `platform/observability/*/image-mirror/<환경>.yaml`를 함께 스캔한다.
 
-새 이미지 버전이나 ECR registry를 바꿀 때는 같은 values 파일 안의 chart image 설정과 `imageMirror.images`를 함께 바꾼다.
+새 이미지 버전이나 ECR registry를 바꿀 때는 chart image 설정과 `imageMirror.images`를 함께 바꾼다.
 
 ```text
 docker.io/grafana/tempo:2.9.0
   -> 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com/grafana/tempo:2.9.0
+
+docker.io/otel/opentelemetry-collector:0.153.0
+  -> 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com/otel/opentelemetry-collector:0.153.0
 
 docker.io/grafana/loki:3.6.7
   -> 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com/grafana/loki:3.6.7
@@ -133,7 +144,7 @@ docker.io/kiwigrid/k8s-sidecar:2.5.0
 2. environment input에 aws-dev, qa, prod 같은 환경명을 입력한다.
 3. image input에 all 또는 `imageMirror.images[].name` 값을 입력한다.
 4. ECR repository가 아직 없으면 create_repositories=true를 켠다.
-5. workflow가 platform/observability/*/values/<환경>.yaml을 스캔한다.
+5. workflow가 platform/observability/*/values/<환경>.yaml와 platform/observability/*/image-mirror/<환경>.yaml을 스캔한다.
 6. 외부 원본 이미지를 pull한다.
 7. ECR target path로 tag를 바꾼다.
 8. ECR에 push한다.
@@ -154,6 +165,7 @@ Docker Desktop 로컬 배포는 `task dev` 한 번으로 Prometheus/Grafana, Tem
 
 ```bash
 task dev
+task --taskfile platform/observability/collector/Taskfile.yml up
 task --taskfile platform/observability/tempo/Taskfile.yml up
 task --taskfile platform/observability/loki/Taskfile.yml up
 ```

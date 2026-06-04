@@ -13,4 +13,4 @@
 
 서비스별 `Deployment`, `Service`, `Ingress`, `ServiceAccount`, `Role`, `RoleBinding`, `NetworkPolicy`, `PDB`, `HPA`, `ServiceMonitor`는 `charts/medikong-service`와 `values/services/*`에서 관리한다.
 
-Prometheus/Grafana는 `platform/monitoring`에 남기고, Tempo/Loki backend는 `platform/observability/<component>`에 둔다. OpenTelemetry Collector 수집 pipeline은 후속 플랫폼 작업으로 별도 선언한다.
+Prometheus/Grafana는 `platform/monitoring`에 남기고, Tempo/Loki backend와 OpenTelemetry Collector trace pipeline은 `platform/observability/<component>`에 둔다.

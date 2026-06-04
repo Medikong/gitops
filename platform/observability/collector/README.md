@@ -1,0 +1,104 @@
+# OpenTelemetry Collector trace pipeline
+
+`platform/observability/collector`는 서비스 파드가 보낸 trace를 받는 OpenTelemetry Collector 배포 기준을 둔다.
+
+## 범위
+
+- `values/aws-dev.yaml`: aws-dev 기준 OpenTelemetry Collector Helm values다.
+- `values/local.yaml`: Docker Desktop 로컬 렌더링과 수동 dev 배포용 values다.
+- `image-mirror/aws-dev.yaml`: 관측성 image mirror workflow가 읽는 Collector image mirror 기준이다. OpenTelemetry Collector Helm chart는 values schema가 엄격해서 `imageMirror` 같은 chart 외부 key를 values 파일에 둘 수 없으므로 이 파일로 분리한다.
+- `Taskfile.yml`: Helm chart 렌더링과 선택적 로컬 배포 명령을 둔다.
+
+Loki filelog receiver, metric scrape, audit log pipeline은 이 Collector trace pipeline에 섞지 않는다.
+
+## 배포 기준
+
+```text
+trace path
+  FastAPI OpenTelemetry instrumentation
+  -> OTLP
+  -> OpenTelemetry Collector
+  -> Tempo
+  -> Grafana
+```
+
+- namespace: `observability`
+- Helm chart: `open-telemetry/opentelemetry-collector`
+- chart version: `0.158.0`
+- implementation: upstream OpenTelemetry Collector
+- image: `otel/opentelemetry-collector:0.153.0`
+- aws-dev image registry: ECR
+- receiver: OTLP gRPC `4317`, OTLP HTTP `4318`
+- processor: `memory_limiter`, `batch`
+- exporter: OTLP gRPC to `tempo.observability.svc.cluster.local:4317`
+- self-metrics: ServiceMonitor scrape on `:8888/metrics`
+- health check: `:13133/`
+
+초기 trace는 sampling 없이 Collector가 받은 trace를 Tempo로 전달한다. Tail sampling은 실제 span 양과 Tempo 저장량을 본 뒤 prod 안정화 단계에서 별도 정책으로 추가한다.
+
+## 서비스 endpoint
+
+서비스 파드는 trace 전용 환경변수를 먼저 사용한다.
+
+```text
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://opentelemetry-collector.observability.svc.cluster.local:4317
+```
+
+공통 endpoint만 사용하는 서비스 helper는 다음 값을 fallback으로 둔다.
+
+```text
+OTEL_EXPORTER_OTLP_ENDPOINT=http://opentelemetry-collector.observability.svc.cluster.local:4317
+```
+
+HTTP/protobuf exporter를 쓰는 서비스는 trace 전용 endpoint를 다음처럼 둔다.
+
+```text
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://opentelemetry-collector.observability.svc.cluster.local:4318/v1/traces
+```
+
+서비스별 Helm values에 endpoint를 넣을 때는 instrumentation이 켜진 FastAPI 서비스에만 추가한다. `dashboard` 같은 frontend release에는 기본으로 주입하지 않는다.
+
+## NetworkPolicy
+
+Collector NetworkPolicy는 다음 경로만 연다.
+
+```text
+ticketing API namespace pods
+  -> opentelemetry-collector:4317/4318
+
+opentelemetry-collector
+  -> tempo:4317
+
+monitoring namespace
+  -> opentelemetry-collector:8888
+```
+
+Collector egress는 Tempo service DNS 해석을 위해 kube-system DNS `53/UDP,TCP`도 허용한다.
+
+## 운영 확인
+
+Prometheus/Grafana에서는 Collector self-metrics로 수신량과 exporter 실패 상태를 본다.
+
+```text
+otelcol_receiver_accepted_spans
+otelcol_receiver_refused_spans
+otelcol_exporter_sent_spans
+otelcol_exporter_send_failed_spans
+otelcol_processor_batch_batch_send_size
+otelcol_process_memory_rss
+```
+
+## 검증
+
+```bash
+task --taskfile platform/observability/collector/Taskfile.yml render
+task observability:render
+task platform:render
+task validate
+```
+
+live cluster 배포는 별도로 요청받았을 때만 실행한다.
+
+```bash
+task --taskfile platform/observability/collector/Taskfile.yml up
+```

@@ -1,0 +1,43 @@
+version: "3"
+
+vars:
+  HELM: '{{default "helm" .HELM}}'
+  KUBECTL: '{{default "kubectl" .KUBECTL}}'
+  GITOPS_ROOT: '{{default "../../.." .GITOPS_ROOT}}'
+  OBSERVABILITY_NAMESPACE: '{{default "observability" .OBSERVABILITY_NAMESPACE}}'
+  COLLECTOR_RELEASE: '{{default "opentelemetry-collector" .COLLECTOR_RELEASE}}'
+  COLLECTOR_CHART: '{{default "open-telemetry/opentelemetry-collector" .COLLECTOR_CHART}}'
+  COLLECTOR_CHART_REPO: '{{default "https://open-telemetry.github.io/opentelemetry-helm-charts" .COLLECTOR_CHART_REPO}}'
+  COLLECTOR_CHART_REPO_NAME: '{{default "open-telemetry" .COLLECTOR_CHART_REPO_NAME}}'
+  COLLECTOR_CHART_VERSION: '{{default "0.158.0" .COLLECTOR_CHART_VERSION}}'
+  COLLECTOR_VALUES: '{{default "platform/observability/collector/values/aws-dev.yaml" .COLLECTOR_VALUES}}'
+  COLLECTOR_LOCAL_VALUES: '{{default "platform/observability/collector/values/local.yaml" .COLLECTOR_LOCAL_VALUES}}'
+
+tasks:
+  repo:
+    cmds:
+      - '{{.HELM}} repo add {{.COLLECTOR_CHART_REPO_NAME}} {{.COLLECTOR_CHART_REPO}} --force-update >/dev/null'
+      - '{{.HELM}} repo update {{.COLLECTOR_CHART_REPO_NAME}} >/dev/null'
+
+  render:
+    desc: OpenTelemetry Collector aws-dev/local Helm values를 렌더링합니다.
+    cmds:
+      - task repo
+      - '{{.HELM}} template {{.COLLECTOR_RELEASE}} {{.COLLECTOR_CHART}} --version {{.COLLECTOR_CHART_VERSION}} --namespace {{.OBSERVABILITY_NAMESPACE}} -f {{.GITOPS_ROOT}}/{{.COLLECTOR_VALUES}} >/dev/null'
+      - '{{.HELM}} template {{.COLLECTOR_RELEASE}} {{.COLLECTOR_CHART}} --version {{.COLLECTOR_CHART_VERSION}} --namespace {{.OBSERVABILITY_NAMESPACE}} -f {{.GITOPS_ROOT}}/{{.COLLECTOR_LOCAL_VALUES}} >/dev/null'
+
+  up:
+    desc: Docker Desktop dev에 OpenTelemetry Collector trace pipeline을 배포합니다.
+    cmds:
+      - task render
+      - '{{.HELM}} upgrade --install {{.COLLECTOR_RELEASE}} {{.COLLECTOR_CHART}} --version {{.COLLECTOR_CHART_VERSION}} --namespace {{.OBSERVABILITY_NAMESPACE}} --create-namespace -f {{.GITOPS_ROOT}}/{{.COLLECTOR_LOCAL_VALUES}} --wait --timeout=300s'
+
+  status:
+    desc: OpenTelemetry Collector 리소스 상태를 표시합니다.
+    cmds:
+      - '{{.KUBECTL}} get deploy,svc,servicemonitor,networkpolicy -n {{.OBSERVABILITY_NAMESPACE}} -l app.kubernetes.io/name=opentelemetry-collector'
+
+  down:
+    desc: Docker Desktop dev OpenTelemetry Collector 리소스를 정리합니다.
+    cmds:
+      - '{{.HELM}} uninstall {{.COLLECTOR_RELEASE}} --namespace {{.OBSERVABILITY_NAMESPACE}} --ignore-not-found'

@@ -24,6 +24,11 @@ vars:
   KONG_PROXY_SERVICE: '{{default "kong-kong-proxy" .KONG_PROXY_SERVICE}}'
   AWS_ARGO_ROOT: '{{default "argo/applications/aws-dev/root.yaml" .AWS_ARGO_ROOT}}'
 
+includes:
+  observability:
+    taskfile: platform/observability/Taskfile.yml
+    dir: platform/observability
+
 tasks:
   default:
     desc: 사용 가능한 GitOps 작업을 표시합니다.
@@ -48,12 +53,6 @@ tasks:
       - helm:template:all
       - platform:render
 
-  observability:render:
-    desc: Tempo/Loki backend Helm chart를 렌더링합니다.
-    cmds:
-      - task --taskfile platform/observability/tempo/Taskfile.yml render
-      - task --taskfile platform/observability/loki/Taskfile.yml render
-
   dev:
     desc: Prometheus/Grafana, Tempo/Loki, 로컬 dev 대상 서비스 Helm release를 Docker Desktop Kubernetes에 배포합니다.
     cmds:
@@ -72,10 +71,9 @@ tasks:
 
   dev:observability:
     internal: true
-    desc: Docker Desktop dev에 Tempo/Loki backend를 배포합니다.
+    desc: Docker Desktop dev에 Tempo/Loki backend와 Collector trace pipeline을 배포합니다.
     cmds:
-      - task --taskfile platform/observability/tempo/Taskfile.yml up
-      - task --taskfile platform/observability/loki/Taskfile.yml up
+      - task: observability:up
 
   dev:platform:
     internal: true
@@ -605,8 +603,7 @@ tasks:
       - '{{.HELM}} list --all-namespaces --filter "{{.LOCAL_DOCKER_DESKTOP_RELEASE_SUFFIX}}"'
       - task: dev:kong:status
       - task --taskfile platform/monitoring/Taskfile.yml status
-      - task --taskfile platform/observability/tempo/Taskfile.yml status
-      - task --taskfile platform/observability/loki/Taskfile.yml status
+      - task: observability:status
 
   dev:down:
     desc: Docker Desktop Kubernetes에 배포한 local Helm release, observability backend, Medikong namespace를 정리합니다.
@@ -637,8 +634,7 @@ tasks:
           release="${service}-{{.LOCAL_DOCKER_DESKTOP_RELEASE_SUFFIX}}"
           {{.HELM}} uninstall "${release}" --namespace "${namespace}" --ignore-not-found
         done
-      - task --taskfile platform/observability/loki/Taskfile.yml down
-      - task --taskfile platform/observability/tempo/Taskfile.yml down
+      - task: observability:down
       - task --taskfile platform/monitoring/Taskfile.yml down
       - task: dev:kong:down
       - |

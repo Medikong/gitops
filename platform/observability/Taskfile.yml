@@ -1,0 +1,30 @@
+version: "3"
+
+tasks:
+  render:
+    desc: Tempo/Loki backend와 OpenTelemetry Collector trace pipeline을 렌더링합니다.
+    cmds:
+      - task --taskfile tempo/Taskfile.yml render
+      - task --taskfile loki/Taskfile.yml render
+      - task --taskfile collector/Taskfile.yml render
+
+  up:
+    desc: Docker Desktop dev에 Tempo/Loki backend와 Collector trace pipeline을 배포합니다.
+    cmds:
+      - task --taskfile tempo/Taskfile.yml up
+      - task --taskfile loki/Taskfile.yml up
+      - task --taskfile collector/Taskfile.yml up
+
+  status:
+    desc: Tempo/Loki backend와 Collector trace pipeline 상태를 표시합니다.
+    cmds:
+      - task --taskfile tempo/Taskfile.yml status
+      - task --taskfile loki/Taskfile.yml status
+      - task --taskfile collector/Taskfile.yml status
+
+  down:
+    desc: Docker Desktop dev observability backend와 Collector trace pipeline을 정리합니다.
+    cmds:
+      - task --taskfile collector/Taskfile.yml down
+      - task --taskfile loki/Taskfile.yml down
+      - task --taskfile tempo/Taskfile.yml down

@@ -1,8 +1,8 @@
 name: Observability Image Mirror
 
-# aws-dev values는 Tempo/Loki 이미지를 ECR 경로로 바라본다.
+# aws-dev values는 Tempo/Loki/Collector 이미지를 ECR 경로로 바라본다.
 # 이 workflow는 Argo CD가 sync하기 전에 외부 이미지를 ECR로 복사해 둔다.
-# 미러링 대상은 각 컴포넌트 values/<환경>.yaml의 imageMirror.images에서 관리한다.
+# 미러링 대상은 각 컴포넌트 values/<환경>.yaml 또는 image-mirror/<환경>.yaml의 imageMirror.images에서 관리한다.
 on:
   workflow_dispatch:
     inputs:
@@ -68,9 +68,16 @@ jobs:
           set -euo pipefail
 
           values_glob="platform/observability/*/values/${MIRROR_ENVIRONMENT}.yaml"
+          mirror_glob="platform/observability/*/image-mirror/${MIRROR_ENVIRONMENT}.yaml"
 
-          if ! compgen -G "${values_glob}" >/dev/null; then
-            printf '환경에 맞는 관측성 values 파일을 찾을 수 없습니다: %s\n' "${values_glob}" >&2
+          # 일부 Helm chart는 values schema가 엄격해서 imageMirror 같은 workflow 전용 key를 허용하지 않는다.
+          # 그런 컴포넌트는 배포 values를 순수 chart values로 유지하고 image-mirror/<환경>.yaml에 미러링 기준만 둔다.
+          shopt -s nullglob
+          mirror_files=( ${values_glob} ${mirror_glob} )
+          shopt -u nullglob
+
+          if [ "${#mirror_files[@]}" -eq 0 ]; then
+            printf '환경에 맞는 관측성 이미지 미러링 기준 파일을 찾을 수 없습니다: %s 또는 %s\n' "${values_glob}" "${mirror_glob}" >&2
             exit 2
           fi
 
@@ -95,7 +102,7 @@ jobs:
                   ].join("\t")
                 end
               end
-            ' "${REQUESTED_IMAGE}" ${values_glob}
+            ' "${REQUESTED_IMAGE}" "${mirror_files[@]}"
           )"
 
           if [ -z "${selected_images}" ]; then

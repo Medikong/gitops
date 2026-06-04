@@ -19,6 +19,8 @@
 
 `argo/applications/aws-dev/platform/monitoring.yaml`은 `monitoring` namespace 기준 Prometheus 기본 스택을 배포한다.
 
+`argo/applications/aws-dev/platform/tempo.yaml`, `argo/applications/aws-dev/platform/loki.yaml`, `argo/applications/aws-dev/platform/collector.yaml`은 `observability` namespace 기준 Tempo/Loki backend와 OpenTelemetry Collector trace pipeline을 Helm chart로 배포한다.
+
 - `platform/monitoring` Kustomize source가 namespace를 만든다.
 - `prometheus-community/kube-prometheus-stack` Helm source가 Prometheus Operator CRD와 chart 리소스를 만든다.
 - sync wave `-20`으로 서비스 Application보다 먼저 생성한다.

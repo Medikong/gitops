@@ -1,0 +1,11 @@
+# OpenTelemetry Collector Helm chart는 values schema가 엄격해서 chart 외부 key인
+# imageMirror를 values/aws-dev.yaml에 넣으면 helm render가 실패한다.
+# 그래서 배포 values는 순수 chart values로 유지하고, ECR 미러링 기준만 이 파일에 분리한다.
+imageMirror:
+  images:
+    - name: opentelemetry-collector
+      description: Upstream OpenTelemetry Collector trace pipeline
+      source: docker.io/otel/opentelemetry-collector:0.153.0
+      targetRegistry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
+      targetRepository: otel/opentelemetry-collector
+      tag: 0.153.0

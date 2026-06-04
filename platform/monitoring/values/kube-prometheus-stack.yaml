@@ -110,6 +110,7 @@ prometheus:
           operator: In
           values:
             - monitoring
+            - observability
             - ticketing-auth
             - ticketing-concert
             - ticketing-notification
@@ -125,6 +126,7 @@ prometheus:
           operator: In
           values:
             - monitoring
+            - observability
             - ticketing-auth
             - ticketing-concert
             - ticketing-notification
