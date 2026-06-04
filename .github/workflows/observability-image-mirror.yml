@@ -1,0 +1,226 @@
+name: Observability Image Mirror
+
+# aws-dev values는 Tempo/Loki 이미지를 ECR 경로로 바라본다.
+# 이 workflow는 Argo CD가 sync하기 전에 외부 이미지를 ECR로 복사해 둔다.
+# 미러링 대상은 각 컴포넌트 values/<환경>.yaml의 imageMirror.images에서 관리한다.
+on:
+  workflow_dispatch:
+    inputs:
+      enabled:
+        description: 실제 미러링 실행 여부. 계정/OIDC 준비 전에는 false 유지
+        required: true
+        type: boolean
+        default: false
+      environment:
+        description: 미러링 기준 환경명
+        required: true
+        type: string
+        default: aws-dev
+      image:
+        description: 미러링할 이미지 이름(all 또는 imageMirror.images[].name)
+        required: true
+        type: string
+        default: all
+      create_repositories:
+        description: ECR repository가 없으면 생성
+        required: true
+        type: boolean
+        default: false
+      force:
+        description: ECR에 같은 tag가 있어도 다시 push
+        required: true
+        type: boolean
+        default: false
+      aws_role_arn:
+        description: Assume할 AWS IAM Role ARN. 비워두면 GitHub variable OBSERVABILITY_IMAGE_MIRROR_ROLE_ARN을 사용
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  # AWS 장기 access key를 GitHub secret에 저장하지 않고, 실행 시점에 GitHub OIDC 토큰으로 IAM Role을 assume한다.
+  id-token: write
+
+concurrency:
+  group: observability-image-mirror
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-2
+
+jobs:
+  disabled:
+    name: 미러링 비활성화 안내
+    if: ${{ !inputs.enabled }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 비활성화 상태 안내
+        run: |
+          {
+            printf '### 관측성 이미지 미러링\n\n'
+            printf '%s\n' '현재 workflow는 커밋되어 있지만 기본값으로 비활성화되어 있습니다.'
+            printf '%s\n' 'AWS OIDC Role, ECR repository, GitHub variable 준비가 끝난 뒤 workflow_dispatch의 enabled 값을 true로 바꿔 실행하세요.'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  mirror:
+    name: 외부 이미지를 ECR로 미러링
+    if: ${{ inputs.enabled }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: GitOps repo 내려받기
+        uses: actions/checkout@v4
+
+      - name: AWS OIDC Role ARN 확인
+        id: aws-role
+        shell: bash
+        env:
+          INPUT_AWS_ROLE_ARN: ${{ inputs.aws_role_arn }}
+          DEFAULT_AWS_ROLE_ARN: ${{ vars.OBSERVABILITY_IMAGE_MIRROR_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+
+          role_arn="${INPUT_AWS_ROLE_ARN:-${DEFAULT_AWS_ROLE_ARN:-}}"
+          if [ -z "${role_arn}" ]; then
+            {
+              printf '%s\n' 'AWS OIDC로 assume할 IAM Role ARN이 필요합니다.'
+              printf '%s\n' 'GitHub Repository/Organization variable OBSERVABILITY_IMAGE_MIRROR_ROLE_ARN을 설정하거나,'
+              printf '%s\n' 'workflow_dispatch 입력값 aws_role_arn에 role ARN을 넣어 실행하세요.'
+            } >&2
+            exit 2
+          fi
+
+          printf 'role_arn=%s\n' "${role_arn}" >> "${GITHUB_OUTPUT}"
+
+      - name: AWS 인증 설정
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ steps.aws-role.outputs.role_arn }}
+          role-session-name: medikong-obsv-mirror-${{ github.run_id }}
+
+      - name: 선택한 이미지 미러링
+        shell: bash
+        env:
+          MIRROR_ENVIRONMENT: ${{ inputs.environment }}
+          REQUESTED_IMAGE: ${{ inputs.image }}
+          CREATE_REPOSITORIES: ${{ inputs.create_repositories }}
+          FORCE_PUSH: ${{ inputs.force }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+        run: |
+          set -euo pipefail
+
+          values_glob="platform/observability/*/values/${MIRROR_ENVIRONMENT}.yaml"
+
+          if ! compgen -G "${values_glob}" >/dev/null; then
+            printf '환경에 맞는 관측성 values 파일을 찾을 수 없습니다: %s\n' "${values_glob}" >&2
+            exit 2
+          fi
+
+          # GitHub Actions runner에는 Ruby가 기본 제공된다.
+          # 별도 yq 설치 없이 각 Helm values 파일의 imageMirror.images를 읽기 위해 Ruby stdlib YAML parser를 사용한다.
+          selected_images="$(
+            ruby -ryaml -e '
+              requested = ARGV.fetch(0)
+              files = ARGV.drop(1)
+              files.each do |values_path|
+                values = YAML.load_file(values_path)
+                Array(values.dig("imageMirror", "images")).each do |image|
+                  name = image.fetch("name")
+                  next if requested != "all" && requested != name
+                  puts [
+                    name,
+                    image.fetch("source"),
+                    image.fetch("targetRegistry"),
+                    image.fetch("targetRepository"),
+                    image.fetch("tag"),
+                    values_path,
+                  ].join("\t")
+                end
+              end
+            ' "${REQUESTED_IMAGE}" ${values_glob}
+          )"
+
+          if [ -z "${selected_images}" ]; then
+            printf '선택한 이미지가 values 파일의 imageMirror.images에 없습니다: %s\n' "${REQUESTED_IMAGE}" >&2
+            exit 2
+          fi
+
+          mirror_one() {
+            local target_registry="$1"
+            local name="$2"
+            local source_ref="$3"
+            local target_repo="$4"
+            local target_tag="$5"
+            local target_ref="${target_registry}/${target_repo}:${target_tag}"
+            local ecr_registry_id
+            local ecr_region
+
+            ecr_registry_id="$(printf '%s' "${target_registry}" | cut -d. -f1)"
+            ecr_region="$(printf '%s' "${target_registry}" | sed -n 's/^[^.]*\.dkr\.ecr\.\([^.]*\)\.amazonaws\.com$/\1/p')"
+
+            if [ -z "${ecr_registry_id}" ] || [ -z "${ecr_region}" ]; then
+              printf '지원하지 않는 ECR registry 형식입니다: %s\n' "${target_registry}" >&2
+              printf '%s\n' '예상 형식: <account-id>.dkr.ecr.<region>.amazonaws.com' >&2
+              exit 2
+            fi
+
+            printf 'ECR 로그인: %s\n' "${target_registry}"
+            aws ecr get-login-password --region "${ecr_region}" \
+              | docker login --username AWS --password-stdin "${target_registry}" >/dev/null
+
+            if [ "${CREATE_REPOSITORIES}" = "true" ]; then
+              if ! aws ecr describe-repositories \
+                --region "${ecr_region}" \
+                --registry-id "${ecr_registry_id}" \
+                --repository-names "${target_repo}" >/dev/null 2>&1; then
+                printf 'ECR repository 생성: %s\n' "${target_repo}"
+                aws ecr create-repository \
+                  --region "${ecr_region}" \
+                  --registry-id "${ecr_registry_id}" \
+                  --repository-name "${target_repo}" \
+                  --image-tag-mutability MUTABLE >/dev/null
+              fi
+            fi
+
+            if [ "${FORCE_PUSH}" != "true" ] && docker manifest inspect "${target_ref}" >/dev/null 2>&1; then
+              printf '건너뜀: %s 이미 존재함: %s\n' "${name}" "${target_ref}"
+              {
+                printf '### 관측성 이미지 미러링\n\n'
+                printf -- '- 이미지: `%s`\n' "${name}"
+                printf -- '- 원본: `%s`\n' "${source_ref}"
+                printf -- '- 대상: `%s`\n' "${target_ref}"
+                printf -- '- 결과: `이미 같은 tag가 있어서 건너뜀`\n\n'
+              } >> "${GITHUB_STEP_SUMMARY}"
+              return 0
+            fi
+
+            printf '미러링 시작: %s -> %s\n' "${source_ref}" "${target_ref}"
+            docker pull "${source_ref}"
+            docker tag "${source_ref}" "${target_ref}"
+            docker push "${target_ref}"
+
+            source_digest="$(docker image inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "${source_ref}" | head -n 1 || true)"
+            target_digest="$(docker image inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "${target_ref}" | head -n 1 || true)"
+
+            {
+              printf '### 관측성 이미지 미러링\n\n'
+              printf -- '- 이미지: `%s`\n' "${name}"
+              printf -- '- 원본: `%s`\n' "${source_ref}"
+              printf -- '- 대상: `%s`\n' "${target_ref}"
+              if [ -n "${source_digest}" ]; then
+                printf -- '- 원본 digest: `%s`\n' "${source_digest}"
+              fi
+              if [ -n "${target_digest}" ]; then
+                printf -- '- 대상 digest: `%s`\n' "${target_digest}"
+              fi
+              printf -- '- 결과: `push 완료`\n\n'
+            } >> "${GITHUB_STEP_SUMMARY}"
+          }
+
+          while IFS=$'\t' read -r name source_ref target_registry target_repo target_tag values_path; do
+            printf '기준 values 파일: %s\n' "${values_path}"
+            mirror_one "${target_registry}" "${name}" "${source_ref}" "${target_repo}" "${target_tag}"
+          done <<<"${selected_images}"

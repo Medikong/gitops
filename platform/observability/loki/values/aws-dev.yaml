@@ -1,0 +1,97 @@
+imageMirror:
+  images:
+    - name: loki
+      description: Loki log backend
+      source: docker.io/grafana/loki:3.6.7
+      targetRegistry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
+      targetRepository: grafana/loki
+      tag: 3.6.7
+    - name: loki-sidecar
+      description: Loki chart rules sidecar image
+      source: docker.io/kiwigrid/k8s-sidecar:2.5.0
+      targetRegistry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
+      targetRepository: kiwigrid/k8s-sidecar
+      tag: 2.5.0
+
+deploymentMode: SingleBinary
+
+chunksCache:
+  enabled: false
+
+resultsCache:
+  enabled: false
+
+imagePullSecrets:
+  - name: ecr-registry
+
+loki:
+  auth_enabled: false
+  image:
+    registry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
+    repository: grafana/loki
+    tag: 3.6.7
+  commonConfig:
+    replication_factor: 1
+  limits_config:
+    retention_period: 168h
+  compactor:
+    compaction_interval: 10m
+    retention_enabled: true
+    delete_request_store: filesystem
+    working_directory: /var/loki/compactor
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+  storage:
+    type: filesystem
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+  nodeSelector:
+    workload.medical-platform.io/tier: platform
+
+sidecar:
+  image:
+    registry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
+    repository: kiwigrid/k8s-sidecar
+    tag: 2.5.0
+
+read:
+  replicas: 0
+
+write:
+  replicas: 0
+
+backend:
+  replicas: 0
+
+gateway:
+  enabled: false
+
+lokiCanary:
+  enabled: false
+
+test:
+  enabled: false
+
+monitoring:
+  selfMonitoring:
+    enabled: false
+    grafanaAgent:
+      installOperator: false

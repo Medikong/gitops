@@ -5,13 +5,13 @@ metadata:
   namespace: argocd
 spec:
   project: default
-  source:
-    repoURL: https://github.com/Medikong/gitops.git
-    targetRevision: HEAD
-    path: argo/applications/aws-dev
-    directory:
-      recurse: true
-      exclude: root.yaml
+  sources:
+    - repoURL: https://github.com/Medikong/gitops.git
+      targetRevision: HEAD
+      path: argo/applications/aws-dev/platform
+    - repoURL: https://github.com/Medikong/gitops.git
+      targetRevision: HEAD
+      path: argo/applications/aws-dev/services
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

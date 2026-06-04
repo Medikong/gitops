@@ -1,0 +1,224 @@
+crds:
+  enabled: true
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    replicas: 1
+    nodeSelector:
+      workload.medical-platform.io/tier: platform
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+defaultRules:
+  create: true
+
+grafana:
+  enabled: true
+  admin:
+    existingSecret: grafana-admin-credentials
+    userKey: admin-user
+    passwordKey: admin-password
+  image:
+    registry: 10.10.10.10:5000/docker.io
+    repository: grafana/grafana
+    tag: "13.0.1"
+  initChownData:
+    image:
+      registry: 10.10.10.10:5000/docker.io
+      repository: library/busybox
+      tag: "1.37.0"
+  sidecar:
+    image:
+      registry: 10.10.10.10:5000/quay.io
+      repository: kiwigrid/k8s-sidecar
+      tag: 2.7.3
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: monitoring
+      provider:
+        allowUiUpdates: false
+        disableDelete: false
+        foldersFromFilesStructure: true
+  additionalDataSources:
+    - name: Tempo
+      uid: tempo
+      type: tempo
+      access: proxy
+      url: http://tempo.observability.svc.cluster.local:3200
+      isDefault: false
+      jsonData:
+        httpMethod: GET
+        serviceMap:
+          datasourceUid: prometheus
+        tracesToLogsV2:
+          datasourceUid: loki
+          spanStartTimeShift: "-5m"
+          spanEndTimeShift: "5m"
+          filterByTraceID: true
+          filterBySpanID: false
+          tags:
+            - key: service.name
+              value: service_name
+            - key: deployment.environment
+              value: deployment_environment
+    - name: Loki
+      uid: loki
+      type: loki
+      access: proxy
+      url: http://loki.observability.svc.cluster.local:3100
+      isDefault: false
+      jsonData:
+        maxLines: 1000
+        derivedFields:
+          - name: trace_id
+            matcherRegex: '"trace_id"\s*:\s*"([a-fA-F0-9]{32})"'
+            datasourceUid: tempo
+            url: '$${__value.raw}'
+  persistence:
+    enabled: true
+    type: pvc
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 384Mi
+  nodeSelector:
+    workload.medical-platform.io/tier: platform
+
+prometheus:
+  prometheusSpec:
+    replicas: 1
+    retention: 30d
+    retentionSize: 20GB
+    serviceMonitorSelector:
+      matchLabels:
+        release: kube-prometheus-stack
+    serviceMonitorNamespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+            - monitoring
+            - ticketing-auth
+            - ticketing-concert
+            - ticketing-notification
+            - ticketing-payment
+            - ticketing-reservation
+            - ticketing-ticket
+    podMonitorSelector:
+      matchLabels:
+        release: kube-prometheus-stack
+    podMonitorNamespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+            - monitoring
+            - ticketing-auth
+            - ticketing-concert
+            - ticketing-notification
+            - ticketing-payment
+            - ticketing-reservation
+            - ticketing-ticket
+    ruleSelector:
+      matchLabels:
+        release: kube-prometheus-stack
+    ruleNamespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+            - monitoring
+            - ticketing-auth
+            - ticketing-concert
+            - ticketing-notification
+            - ticketing-payment
+            - ticketing-reservation
+            - ticketing-ticket
+    image:
+      registry: 10.10.10.10:5000/quay.io
+      repository: prometheus/prometheus
+      tag: v3.11.3-distroless
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 30Gi
+    nodeSelector:
+      workload.medical-platform.io/tier: platform
+
+prometheusOperator:
+  image:
+    registry: 10.10.10.10:5000/quay.io
+    repository: prometheus-operator/prometheus-operator
+    tag: v0.90.1
+  prometheusConfigReloader:
+    image:
+      registry: 10.10.10.10:5000/quay.io
+      repository: prometheus-operator/prometheus-config-reloader
+      tag: v0.90.1
+  admissionWebhooks:
+    patch:
+      image:
+        registry: 10.10.10.10:5000/ghcr.io
+        repository: jkroepke/kube-webhook-certgen
+        tag: 1.8.2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  nodeSelector:
+    workload.medical-platform.io/tier: platform
+
+kube-state-metrics:
+  image:
+    registry: 10.10.10.10:5000/registry.k8s.io
+    repository: kube-state-metrics/kube-state-metrics
+    tag: v2.18.0
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+  nodeSelector:
+    workload.medical-platform.io/tier: platform
+
+prometheus-node-exporter:
+  image:
+    registry: 10.10.10.10:5000/quay.io
+    repository: prometheus/node-exporter
+    tag: v1.11.1
+    distroless: true
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi

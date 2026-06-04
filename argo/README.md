@@ -9,11 +9,19 @@
 | Git repo | `https://github.com/Medikong/gitops.git` |
 | Revision | `HEAD` |
 | Bootstrap Application | `argo/application.yaml` |
-| Root path | `argo/applications/aws-dev/services` |
+| Root path | `argo/applications/aws-dev/platform` + `argo/applications/aws-dev/services` |
 | Service chart | `charts/medikong-service` |
 | Values order | `values/base.yaml -> values/env/<env>.yaml -> values/services/<service>.yaml -> optional override` |
 
-`argo/application.yaml`은 `aws-dev` 서비스별 Application을 묶는 app-of-apps 초안이다. 기존 단일 Kustomize Application은 운영 경로에서 제외했고, reference는 `archive/k8s-kustomize`에 남긴다.
+`argo/application.yaml`은 `aws-dev` 플랫폼 Application과 서비스별 Application을 묶는 app-of-apps 초안이다. 기존 단일 Kustomize Application은 운영 경로에서 제외했고, reference는 `archive/k8s-kustomize`에 남긴다.
+
+## 플랫폼 Application
+
+`argo/applications/aws-dev/platform/monitoring.yaml`은 `monitoring` namespace 기준 Prometheus 기본 스택을 배포한다.
+
+- `platform/monitoring` Kustomize source가 namespace를 만든다.
+- `prometheus-community/kube-prometheus-stack` Helm source가 Prometheus Operator CRD와 chart 리소스를 만든다.
+- sync wave `-20`으로 서비스 Application보다 먼저 생성한다.
 
 ## 서비스별 Application
 
@@ -32,7 +40,7 @@ sources:
   - ref: values
 ```
 
-이 초안은 실제 sync 수행 전 구조 검증용이다. sync wave, project 분리, prod 승인 정책, secret 연결은 후속 작업으로 분리한다.
+이 초안은 실제 sync 수행 전 구조 검증용이다. project 분리, prod 승인 정책, secret 연결은 후속 작업으로 분리한다.
 
 ## 적용
 

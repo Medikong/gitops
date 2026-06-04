@@ -14,9 +14,23 @@ spec:
       app: {{ .Values.app.name | quote }}
   policyTypes:
 {{ toYaml .Values.networkPolicy.policyTypes | nindent 4 }}
-{{- with .Values.networkPolicy.ingress }}
+{{- $serviceMonitorNetworkPolicy := default dict .Values.serviceMonitor.networkPolicy }}
+{{- $allowPrometheusScrape := and .Values.serviceMonitor.enabled (default true $serviceMonitorNetworkPolicy.enabled) }}
+{{- $monitoringNamespace := default "monitoring" $serviceMonitorNetworkPolicy.namespace }}
+{{- if or .Values.networkPolicy.ingress $allowPrometheusScrape }}
   ingress:
+{{- with .Values.networkPolicy.ingress }}
 {{ toYaml . | nindent 4 }}
+{{- end }}
+{{- if $allowPrometheusScrape }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $monitoringNamespace | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.serviceMonitor.port | quote }}
+{{- end }}
 {{- else }}
   ingress: []
 {{- end }}

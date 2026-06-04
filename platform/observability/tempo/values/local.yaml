@@ -1,0 +1,30 @@
+replicas: 1
+
+tempo:
+  repository: grafana/tempo
+  tag: 2.9.0
+  retention: 6h
+  memBallastSizeMbs: 64
+  reportingEnabled: false
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+      wal:
+        path: /var/tempo/wal
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 384Mi
+
+persistence:
+  enabled: true
+  storageClassName: ""
+  size: 2Gi
+
+serviceMonitor:
+  enabled: false
