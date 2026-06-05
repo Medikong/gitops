@@ -6,7 +6,6 @@ alertmanager:
   alertmanagerSpec:
     replicas: 1
     nodeSelector:
-      workload.medical-platform.io/tier: platform
     resources:
       requests:
         cpu: 50m
@@ -94,7 +93,6 @@ grafana:
       cpu: 300m
       memory: 384Mi
   nodeSelector:
-    workload.medical-platform.io/tier: platform
 
 prometheus:
   prometheusSpec:
@@ -166,7 +164,6 @@ prometheus:
             requests:
               storage: 30Gi
     nodeSelector:
-      workload.medical-platform.io/tier: platform
 
 prometheusOperator:
   image:
@@ -192,7 +189,6 @@ prometheusOperator:
       cpu: 200m
       memory: 256Mi
   nodeSelector:
-    workload.medical-platform.io/tier: platform
 
 kube-state-metrics:
   image:
@@ -207,7 +203,6 @@ kube-state-metrics:
       cpu: 100m
       memory: 128Mi
   nodeSelector:
-    workload.medical-platform.io/tier: platform
 
 prometheus-node-exporter:
   image:
