@@ -6,6 +6,11 @@ name: Observability Image Mirror
 on:
   workflow_dispatch:
     inputs:
+      enabled:
+        description: 실제 미러링 실행 여부. 점검 때만 false로 바꿈
+        required: true
+        type: boolean
+        default: true
       environment:
         description: 미러링 기준 환경명
         required: true
@@ -26,9 +31,16 @@ on:
         required: true
         type: boolean
         default: false
+      aws_role_arn:
+        description: Assume할 AWS IAM Role ARN. 비워두면 GitHub variable OBSERVABILITY_IMAGE_MIRROR_ROLE_ARN을 사용
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
+  # AWS 장기 access key를 GitHub secret에 저장하지 않고, 실행 시점에 GitHub OIDC 토큰으로 IAM Role을 assume한다.
+  id-token: write
 
 concurrency:
   group: observability-image-mirror
@@ -38,8 +50,22 @@ env:
   AWS_REGION: ap-northeast-2
 
 jobs:
+  disabled:
+    name: 미러링 비활성화 안내
+    if: ${{ !inputs.enabled }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 비활성화 상태 안내
+        run: |
+          {
+            printf '### 관측성 이미지 미러링\n\n'
+            printf '%s\n' 'workflow_dispatch의 enabled 입력값이 false라서 미러링을 실행하지 않았습니다.'
+            printf '%s\n' '일반 실행은 enabled=true 기본값을 사용하세요.'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
   mirror:
     name: 외부 이미지를 ECR로 미러링
+    if: ${{ inputs.enabled }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -47,12 +73,33 @@ jobs:
       - name: GitOps repo 내려받기
         uses: actions/checkout@v4
 
-      - name: ECR 로그인
-        uses: aws-actions/amazon-ecr-login@v2
+      - name: AWS OIDC Role ARN 확인
+        id: aws-role
+        shell: bash
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ env.AWS_REGION }}
+          INPUT_AWS_ROLE_ARN: ${{ inputs.aws_role_arn }}
+          DEFAULT_AWS_ROLE_ARN: ${{ vars.OBSERVABILITY_IMAGE_MIRROR_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+
+          role_arn="${INPUT_AWS_ROLE_ARN:-${DEFAULT_AWS_ROLE_ARN:-}}"
+          if [ -z "${role_arn}" ]; then
+            {
+              printf '%s\n' 'AWS OIDC로 assume할 IAM Role ARN이 필요합니다.'
+              printf '%s\n' 'GitHub Repository/Organization variable OBSERVABILITY_IMAGE_MIRROR_ROLE_ARN을 설정하거나,'
+              printf '%s\n' 'workflow_dispatch 입력값 aws_role_arn에 role ARN을 넣어 실행하세요.'
+            } >&2
+            exit 2
+          fi
+
+          printf 'role_arn=%s\n' "${role_arn}" >> "${GITHUB_OUTPUT}"
+
+      - name: AWS 인증 설정
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ steps.aws-role.outputs.role_arn }}
+          role-session-name: medikong-obsv-mirror-${{ github.run_id }}
 
       - name: 선택한 이미지 미러링
         shell: bash
@@ -61,8 +108,6 @@ jobs:
           REQUESTED_IMAGE: ${{ inputs.image }}
           CREATE_REPOSITORIES: ${{ inputs.create_repositories }}
           FORCE_PUSH: ${{ inputs.force }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ env.AWS_REGION }}
         run: |
           set -euo pipefail
@@ -117,11 +162,31 @@ jobs:
             local target_repo="$4"
             local target_tag="$5"
             local target_ref="${target_registry}/${target_repo}:${target_tag}"
+            local ecr_registry_id
+            local ecr_region
+
+            ecr_registry_id="$(printf '%s' "${target_registry}" | cut -d. -f1)"
+            ecr_region="$(printf '%s' "${target_registry}" | sed -n 's/^[^.]*\.dkr\.ecr\.\([^.]*\)\.amazonaws\.com$/\1/p')"
+
+            if [ -z "${ecr_registry_id}" ] || [ -z "${ecr_region}" ]; then
+              printf '지원하지 않는 ECR registry 형식입니다: %s\n' "${target_registry}" >&2
+              printf '%s\n' '예상 형식: <account-id>.dkr.ecr.<region>.amazonaws.com' >&2
+              exit 2
+            fi
+
+            printf 'ECR 로그인: %s\n' "${target_registry}"
+            aws ecr get-login-password --region "${ecr_region}" \
+              | docker login --username AWS --password-stdin "${target_registry}" >/dev/null
 
             if [ "${CREATE_REPOSITORIES}" = "true" ]; then
-              if ! aws ecr describe-repositories --repository-names "${target_repo}" >/dev/null 2>&1; then
+              if ! aws ecr describe-repositories \
+                --region "${ecr_region}" \
+                --registry-id "${ecr_registry_id}" \
+                --repository-names "${target_repo}" >/dev/null 2>&1; then
                 printf 'ECR repository 생성: %s\n' "${target_repo}"
                 aws ecr create-repository \
+                  --region "${ecr_region}" \
+                  --registry-id "${ecr_registry_id}" \
                   --repository-name "${target_repo}" \
                   --image-tag-mutability MUTABLE >/dev/null
               fi

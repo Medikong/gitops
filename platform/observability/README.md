@@ -137,21 +137,56 @@ docker.io/kiwigrid/k8s-sidecar:2.5.0
 .github/workflows/observability-image-mirror.yml
 ```
 
+AWS 인증은 GitHub OIDC를 사용한다. 장기 access key를 GitHub secret에 저장하지 않고, workflow 실행 시점에 GitHub가 발급한 OIDC token으로 AWS IAM Role을 assume한다.
+
+사전 준비:
+
+```text
+1. AWS IAM에 GitHub Actions OIDC provider를 구성한다.
+2. 관측성 이미지 미러링용 IAM Role을 만든다.
+3. Role trust policy에서 Medikong/gitops repository의 OIDC subject만 허용한다.
+4. Role에 ECR pull/push 권한을 부여한다.
+5. GitHub Repository 또는 Organization variable에 OBSERVABILITY_IMAGE_MIRROR_ROLE_ARN을 등록한다.
+```
+
+`OBSERVABILITY_IMAGE_MIRROR_ROLE_ARN`이 아직 없으면 workflow_dispatch 입력값 `aws_role_arn`으로 임시 지정할 수 있다. 단, 운영 기준은 repository/organization variable로 관리한다.
+
+현재 workflow는 OIDC 준비가 끝난 기준으로 기본 활성화되어 있다. `workflow_dispatch`의 `enabled` 기본값은 `true`이며, 점검이나 dry-run 성격으로 실행을 막아야 할 때만 `false`로 바꾼다.
+
+Role 권한은 넓게 열지 않는다. 기본 미러링에는 다음 계열 권한만 필요하다.
+
+```text
+ECR login/token
+  - ecr:GetAuthorizationToken
+
+ECR repository 확인/생성
+  - ecr:DescribeRepositories
+  - ecr:CreateRepository
+
+ECR image push
+  - ecr:BatchCheckLayerAvailability
+  - ecr:InitiateLayerUpload
+  - ecr:UploadLayerPart
+  - ecr:CompleteLayerUpload
+  - ecr:PutImage
+```
+
 실행 과정:
 
 ```text
 1. GitHub Actions에서 Observability Image Mirror workflow를 실행한다.
-2. environment input에 aws-dev, qa, prod 같은 환경명을 입력한다.
-3. image input에 all 또는 `imageMirror.images[].name` 값을 입력한다.
-4. ECR repository가 아직 없으면 create_repositories=true를 켠다.
-5. workflow가 platform/observability/*/values/<환경>.yaml와 platform/observability/*/image-mirror/<환경>.yaml을 스캔한다.
-6. 외부 원본 이미지를 pull한다.
-7. ECR target path로 tag를 바꾼다.
-8. ECR에 push한다.
-9. 같은 tag가 이미 있으면 기본적으로 건너뛴다.
+2. enabled input은 기본값 true를 유지한다.
+3. environment input에 aws-dev, qa, prod 같은 환경명을 입력한다.
+4. image input에 all 또는 `imageMirror.images[].name` 값을 입력한다.
+5. ECR repository가 아직 없으면 create_repositories=true 기본값으로 생성한다.
+6. workflow가 platform/observability/*/values/<환경>.yaml와 platform/observability/*/image-mirror/<환경>.yaml을 스캔한다.
+7. 외부 원본 이미지를 pull한다.
+8. ECR target path로 tag를 바꾼다.
+9. ECR에 push한다.
+10. 같은 tag가 이미 있으면 기본적으로 건너뛴다.
 ```
 
-기본값은 기존 repository를 전제로 두고, destination tag가 이미 있으면 push를 건너뛴다. 같은 tag를 다시 덮어써야 할 때만 `force=true`를 사용한다.
+기본값은 필요한 ECR repository를 생성하고, destination tag가 이미 있으면 push를 건너뛴다. 같은 tag를 다시 덮어써야 할 때만 `force=true`를 사용한다.
 
 ## 검증
 
