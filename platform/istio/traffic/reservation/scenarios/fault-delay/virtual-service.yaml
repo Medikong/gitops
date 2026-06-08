@@ -6,7 +6,7 @@ metadata:
   labels:
     app.kubernetes.io/name: reservation-service
     app.kubernetes.io/part-of: medikong
-    medikong.io/traffic-policy: stable
+    medikong.io/traffic-policy: fault-delay
 spec:
   hosts:
     - reservation-service
@@ -14,7 +14,12 @@ spec:
   gateways:
     - mesh
   http:
-    - name: reservation-stable
+    - name: reservation-fault-delay
+      fault:
+        delay:
+          fixedDelay: 3s
+          percentage:
+            value: 100
       timeout: 2s
       retries:
         attempts: 2

@@ -644,6 +644,40 @@ tasks:
         printf '%s\n' '  platform/istio/traffic/reservation/scenarios/canary-100'
         printf '%s\n' '  platform/istio/traffic/reservation/scenarios/rollback'
 
+  circuit-breaker:render:
+    desc: reservation-service circuit breaker와 fault injection scenario manifest를 렌더링합니다.
+    cmds:
+      - |
+        set -eu
+        {{.KUBECTL}} kustomize {{.ISTIO_PLATFORM}}/traffic/reservation >/dev/null
+        for scenario in fault-5xx fault-delay rollback; do
+          {{.KUBECTL}} kustomize "{{.ISTIO_PLATFORM}}/traffic/reservation/scenarios/${scenario}" >/dev/null
+        done
+
+  circuit-breaker:check:
+    desc: reservation-service circuit breaker 정책과 검증 대상 리소스 상태를 확인합니다.
+    cmds:
+      - |
+        set -eu
+        {{.KUBECTL}} get destinationrule -n ticketing-reservation reservation-service
+        {{.KUBECTL}} get virtualservice -n ticketing-reservation reservation-service
+        {{.KUBECTL}} get pods -n ticketing-reservation -l app=reservation-service --show-labels
+        printf '%s\n' 'Expected DestinationRule trafficPolicy:'
+        printf '%s\n' '  connectionPool.tcp.maxConnections=100'
+        printf '%s\n' '  connectionPool.http.http1MaxPendingRequests=100'
+        printf '%s\n' '  connectionPool.http.maxRequestsPerConnection=50'
+        printf '%s\n' '  outlierDetection.consecutive5xxErrors=5'
+        printf '%s\n' '  outlierDetection.baseEjectionTime=30s'
+        printf '%s\n' 'Expected VirtualService stable policy:'
+        printf '%s\n' '  timeout=2s'
+        printf '%s\n' '  retries.attempts=2'
+        printf '%s\n' '  retries.perTryTimeout=1s'
+        printf '%s\n' 'Fault scenarios:'
+        printf '%s\n' '  platform/istio/traffic/reservation/scenarios/fault-5xx'
+        printf '%s\n' '  platform/istio/traffic/reservation/scenarios/fault-delay'
+        printf '%s\n' 'Rollback scenario:'
+        printf '%s\n' '  platform/istio/traffic/reservation/scenarios/rollback'
+
   dev:kong:check:
     internal: true
     desc: Docker Desktop dev용 Kong chart values와 Kong shared resource 렌더링을 검증합니다.

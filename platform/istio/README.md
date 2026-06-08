@@ -193,3 +193,54 @@ The VirtualService uses the `mesh` gateway. If Kong remains outside the mesh,
 weight-based routing is verified from mesh-internal clients first. To route
 external Kong traffic through the same Istio weights, Kong must participate in
 the mesh or forward through an Istio gateway path.
+
+## Reservation circuit breaker
+
+`reservation-service` is also the first circuit breaker target because it
+already has a `DestinationRule` and `VirtualService`.
+
+Default policy:
+
+```text
+connectionPool.tcp.maxConnections = 100
+connectionPool.http.http1MaxPendingRequests = 100
+connectionPool.http.maxRequestsPerConnection = 50
+outlierDetection.consecutive5xxErrors = 5
+outlierDetection.interval = 10s
+outlierDetection.baseEjectionTime = 30s
+outlierDetection.maxEjectionPercent = 50
+```
+
+Stable route policy:
+
+```text
+timeout = 2s
+retries.attempts = 2
+retries.perTryTimeout = 1s
+retries.retryOn = 5xx,connect-failure,refused-stream
+```
+
+Fault injection scenarios are stored but not included in the default GitOps
+state:
+
+```text
+platform/istio/traffic/reservation/scenarios/fault-5xx
+platform/istio/traffic/reservation/scenarios/fault-delay
+```
+
+Render validation:
+
+```bash
+task circuit-breaker:render
+```
+
+Runtime validation:
+
+```bash
+task circuit-breaker:check
+```
+
+The runtime ejection check requires at least two healthy `reservation-service`
+endpoints with Envoy sidecars. If the application pods are failing because DB or
+Kafka is unavailable, keep this as a manifest-level implementation until the
+application layer is restored.
