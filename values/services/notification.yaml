@@ -11,6 +11,8 @@ image:
 
 deployment:
   replicas: 2
+  podAnnotations:
+    sidecar.istio.io/inject: "true"
 
 container:
   port: 8084

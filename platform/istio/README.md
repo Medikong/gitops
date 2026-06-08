@@ -77,6 +77,60 @@ concert-service-...   2/2   Running
 Keep this first rollout limited to `concert-service`. Do not enable namespace
 wide injection until Kong-routed concert API smoke tests still pass.
 
+## Backend sidecar rollout
+
+After the first `concert-service` and `reservation-service` mesh rollout, the
+next backend services opted into workload-level sidecar injection are:
+
+```text
+payment-service
+ticket-service
+notification-service
+```
+
+Their service values set:
+
+```yaml
+deployment:
+  podAnnotations:
+    sidecar.istio.io/inject: "true"
+```
+
+Excluded for this rollout:
+
+```text
+auth-service
+dashboard
+```
+
+`auth-service` is the JWT issuing and authentication boundary, so keep it out
+of this rollout until Kong JWT smoke tests and the other backend sidecar checks
+are stable. `dashboard` is a frontend workload and is not required for the
+first internal service mesh traffic validation.
+
+Render validation:
+
+```bash
+task sidecar:render
+```
+
+Runtime validation:
+
+```bash
+task sidecar:check
+```
+
+Expected Pod readiness after the application dependencies are available:
+
+```text
+payment-service-...        2/2 Running
+ticket-service-...         2/2 Running
+notification-service-...   2/2 Running
+```
+
+The Pod count does not increase. Each existing Pod gets an additional
+`istio-proxy` container.
+
 ## Kiali access
 
 Kiali is intentionally not exposed through Kong or a public LoadBalancer during

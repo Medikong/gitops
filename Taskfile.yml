@@ -610,6 +610,55 @@ tasks:
         printf '%s\n' '  istio_request_duration_milliseconds_bucket'
         printf '%s\n' '  pilot_xds_pushes'
 
+  sidecar:render:
+    desc: auth/dashboard을 제외한 backend sidecar rollout 대상 Helm manifest를 렌더링합니다.
+    cmds:
+      - |
+        set -eu
+        for service in payment ticket notification; do
+          {{.HELM}} template "${service}-sidecar" {{.SERVICE_CHART}} \
+            -f {{.VALUES_BASE}} \
+            -f values/env/aws-dev.yaml \
+            -f "values/services/${service}.yaml" >/dev/null
+        done
+
+  sidecar:check:
+    desc: payment/ticket/notification sidecar injection annotation과 Pod container 상태를 확인합니다.
+    cmds:
+      - |
+        set -eu
+        for item in \
+          ticketing-payment/payment-service \
+          ticketing-ticket/ticket-service \
+          ticketing-notification/notification-service; do
+          ns="${item%/*}"
+          deployment="${item#*/}"
+          printf '%s\n' "Deployment annotation: ${ns}/${deployment}"
+          {{.KUBECTL}} get deployment "${deployment}" -n "${ns}" \
+            -o jsonpath='{.spec.template.metadata.annotations.sidecar\.istio\.io/inject}{"\n"}'
+          {{.KUBECTL}} get pods -n "${ns}" -l "app=${deployment}" \
+            -o custom-columns=NAME:.metadata.name,READY:.status.containerStatuses[*].ready,CONTAINERS:.spec.containers[*].name
+        done
+
+  rbac:render:
+    desc: platform/policies의 human RBAC Role/RoleBinding manifest를 렌더링합니다.
+    cmds:
+      - '{{.KUBECTL}} kustomize platform/policies >/dev/null'
+
+  rbac:check:
+    desc: Human RBAC Role/RoleBinding 적용 상태를 확인합니다.
+    cmds:
+      - |
+        set -eu
+        for ns in ticketing-auth ticketing-concert ticketing-reservation ticketing-payment ticketing-ticket ticketing-notification ticketing-dashboard ticketing-messaging; do
+          {{.KUBECTL}} get role -n "${ns}" medikong-developer-readonly medikong-operator-deployment-manager medikong-sre-namespace-admin
+          {{.KUBECTL}} get rolebinding -n "${ns}" medikong-developers-readonly medikong-operators-deployment-manager medikong-sres-namespace-admin
+        done
+        printf '%s\n' 'Expected groups:'
+        printf '%s\n' '  medikong:developers -> readonly'
+        printf '%s\n' '  medikong:operators  -> deployment patch/update'
+        printf '%s\n' '  medikong:sres       -> namespace admin'
+
   canary:render:
     desc: reservation-service canary Helm/VirtualService/DestinationRule manifest를 렌더링합니다.
     cmds:
@@ -987,6 +1036,7 @@ tasks:
       - '{{.KUBECTL}} kustomize platform/data >/dev/null'
       - '{{.KUBECTL}} kustomize platform/kong >/dev/null'
       - '{{.KUBECTL}} kustomize platform/monitoring >/dev/null'
+      - '{{.KUBECTL}} kustomize platform/policies >/dev/null'
       - task istio:render
 
   argo:validate:
