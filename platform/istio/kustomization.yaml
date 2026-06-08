@@ -6,4 +6,3 @@ resources:
   - argocd/istio-base.yaml
   - argocd/istiod.yaml
   - argocd/kiali.yaml
-  - traffic/reservation

@@ -136,6 +136,16 @@ The stable policy is included in:
 platform/istio/traffic/reservation
 ```
 
+It is applied by a separate Argo CD Application:
+
+```text
+argo/applications/aws-dev/platform/istio-traffic-reservation.yaml
+```
+
+Do not include the traffic policy directly in `platform/istio/kustomization.yaml`.
+The traffic policy depends on Istio CRDs, so it must sync after `istio-base`
+has installed `VirtualService` and `DestinationRule` CRDs.
+
 The canary scenario manifests are stored but not included in the default
 `platform/istio` kustomization:
 
