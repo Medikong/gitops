@@ -54,13 +54,18 @@ file sets:
 
 ```yaml
 deployment:
+  podLabels:
+    sidecar.istio.io/inject: "true"
   podAnnotations:
     sidecar.istio.io/inject: "true"
 ```
 
-The annotation only affects newly created Pods. If `concert-service` was already
-running before `istiod` became ready, restart the workload after the Istio
-control plane is healthy:
+Istio's mutating webhook uses Kubernetes labels for object selector matching,
+so the workload-level opt-in requires the Pod template label. The annotation is
+kept as an explicit injection intent after the webhook is invoked. These fields
+only affect newly created Pods. If `concert-service` was already running before
+`istiod` became ready, restart the workload after the Istio control plane is
+healthy:
 
 ```bash
 kubectl rollout restart deployment/concert-service -n ticketing-concert
@@ -92,6 +97,8 @@ Their service values set:
 
 ```yaml
 deployment:
+  podLabels:
+    sidecar.istio.io/inject: "true"
   podAnnotations:
     sidecar.istio.io/inject: "true"
 ```

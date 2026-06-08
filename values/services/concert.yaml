@@ -11,6 +11,8 @@ image:
 
 deployment:
   replicas: 2
+  podLabels:
+    sidecar.istio.io/inject: "true"
   podAnnotations:
     sidecar.istio.io/inject: "true"
 

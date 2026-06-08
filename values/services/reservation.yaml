@@ -13,6 +13,7 @@ deployment:
   replicas: 2
   podLabels:
     version: v1
+    sidecar.istio.io/inject: "true"
   podAnnotations:
     sidecar.istio.io/inject: "true"
 
@@ -22,6 +23,7 @@ canary:
   replicas: 1
   podLabels:
     medikong.io/canary: "true"
+    sidecar.istio.io/inject: "true"
   podAnnotations:
     sidecar.istio.io/inject: "true"
 
