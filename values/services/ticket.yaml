@@ -40,15 +40,16 @@ service:
 
 ingress:
   enabled: true
-  name: ticket-api
   className: kong
-  annotations:
-    konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-rate-limit-tickets,ticketing-correlation-id,ticketing-prometheus
-  hosts:
-    - host: ""
-      paths:
-        - path: /tickets
-          pathType: Prefix
+  objects:
+    - name: ticket-customer-api
+      annotations:
+        konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-role-customer,ticketing-rate-limit-tickets,ticketing-correlation-id,ticketing-prometheus
+      hosts:
+        - host: ""
+          paths:
+            - path: /tickets
+              pathType: Prefix
 
 networkPolicy:
   enabled: true

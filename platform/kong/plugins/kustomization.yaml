@@ -7,3 +7,4 @@ resources:
   - jwt.yaml
   - prometheus.yaml
   - rate-limiting.yaml
+  - role-guard.yaml

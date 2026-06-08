@@ -89,6 +89,7 @@ ingress:
   name: ""
   className: kong
   annotations: {}
+  objects: []
   hosts:
     - host: ""
       paths:

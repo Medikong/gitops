@@ -40,15 +40,16 @@ service:
 
 ingress:
   enabled: true
-  name: notification-api
   className: kong
-  annotations:
-    konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-rate-limit-notifications,ticketing-correlation-id,ticketing-prometheus
-  hosts:
-    - host: ""
-      paths:
-        - path: /notifications
-          pathType: Prefix
+  objects:
+    - name: notification-customer-api
+      annotations:
+        konghq.com/plugins: ticketing-jwt,ticketing-identity-headers,ticketing-role-customer,ticketing-rate-limit-notifications,ticketing-correlation-id,ticketing-prometheus
+      hosts:
+        - host: ""
+          paths:
+            - path: /notifications
+              pathType: Prefix
 
 networkPolicy:
   enabled: true

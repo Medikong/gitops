@@ -23,6 +23,7 @@ vars:
   KONG_VALUES: '{{default "platform/kong/values-local.yaml" .KONG_VALUES}}'
   KONG_PROXY_SERVICE: '{{default "kong-kong-proxy" .KONG_PROXY_SERVICE}}'
   AWS_ARGO_ROOT: '{{default "argo/applications/aws-dev/root.yaml" .AWS_ARGO_ROOT}}'
+  ISTIO_PLATFORM: '{{default "platform/istio" .ISTIO_PLATFORM}}'
 
 includes:
   observability:
@@ -325,7 +326,9 @@ tasks:
           image_registry="${image_registry%/}/${image_namespace#/}"
         fi
         for service_file in values/services/*.yaml; do
-          service="$(basename "${service_file}" .yaml)"
+          service="${service_file##*/}"
+          service="${service##*\\}"
+          service="${service%.yaml}"
           {{.HELM}} template "${service}-{{.LOCAL_DOCKER_DESKTOP_ENV}}-dev" {{.SERVICE_CHART}} \
             -f {{.VALUES_BASE}} \
             -f values/env/{{.LOCAL_DOCKER_DESKTOP_ENV}}.yaml \
@@ -538,6 +541,107 @@ tasks:
       - '{{.HELM}} template {{.KONG_RELEASE}} {{.KONG_CHART}} --version {{.KONG_CHART_VERSION}} --namespace {{.KONG_NAMESPACE}} -f {{.KONG_VALUES}} >/dev/null'
       - '{{.KUBECTL}} kustomize platform/kong >/dev/null'
 
+  istio:render:
+    desc: Istio platform ArgoCD Application 레이어를 렌더링합니다.
+    cmds:
+      - '{{.KUBECTL}} kustomize {{.ISTIO_PLATFORM}} >/dev/null'
+
+  dev:istio:
+    desc: 현재 Kubernetes 컨텍스트에 Istio platform ArgoCD Application을 등록하고 상태 확인 명령을 안내합니다.
+    cmds:
+      - task: istio:render
+      - '{{.KUBECTL}} apply -k {{.ISTIO_PLATFORM}}'
+      - |
+        set -eu
+        printf '%s\n' 'Istio platform Applications were applied.'
+        printf '%s\n' 'Next checks:'
+        printf '%s\n' '  kubectl get applications -n argocd istio-base istiod kiali'
+        printf '%s\n' '  task mesh-check'
+
+  mesh-check:
+    desc: Istio control plane, Kiali, concert-service sidecar injection 상태를 확인합니다.
+    cmds:
+      - |
+        set -eu
+        {{.KUBECTL}} get namespace istio-system
+        {{.KUBECTL}} get applications -n argocd istio-base istiod kiali
+        {{.KUBECTL}} get pods -n istio-system
+        {{.KUBECTL}} get crd virtualservices.networking.istio.io destinationrules.networking.istio.io
+        {{.KUBECTL}} get svc -n istio-system kiali
+        inject="$({{.KUBECTL}} get deployment concert-service -n ticketing-concert -o jsonpath='{.spec.template.metadata.annotations.sidecar\.istio\.io/inject}' 2>/dev/null || true)"
+        if [ "${inject}" != "true" ]; then
+          printf 'concert-service sidecar injection annotation is not enabled. current=%s\n' "${inject:-<empty>}" >&2
+          exit 1
+        fi
+        pod="$({{.KUBECTL}} get pods -n ticketing-concert -l app=concert-service -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+        if [ -z "${pod}" ]; then
+          printf '%s\n' 'concert-service pod was not found.' >&2
+          exit 1
+        fi
+        containers="$({{.KUBECTL}} get pod "${pod}" -n ticketing-concert -o jsonpath='{.spec.containers[*].name}')"
+        printf 'concert-service pod containers: %s\n' "${containers}"
+        case " ${containers} " in
+          *" istio-proxy "*) ;;
+          *)
+            printf '%s\n' 'concert-service pod does not contain istio-proxy yet. Restart after istiod is healthy.' >&2
+            exit 1
+            ;;
+        esac
+
+  mesh-monitoring:render:
+    desc: Istio/Kiali/Prometheus mesh monitoring 리소스를 렌더링합니다.
+    cmds:
+      - '{{.KUBECTL}} kustomize platform/monitoring >/dev/null'
+      - '{{.KUBECTL}} kustomize {{.ISTIO_PLATFORM}} >/dev/null'
+
+  mesh-monitoring-check:
+    desc: Mesh Monitoring용 PodMonitor, Kiali, Prometheus/Grafana service 상태를 확인합니다.
+    cmds:
+      - |
+        set -eu
+        {{.KUBECTL}} get crd podmonitors.monitoring.coreos.com
+        {{.KUBECTL}} get podmonitor -n monitoring istiod concert-envoy-sidecar
+        {{.KUBECTL}} get svc -n monitoring kube-prometheus-stack-prometheus kube-prometheus-stack-grafana
+        {{.KUBECTL}} get svc -n istio-system kiali
+        {{.KUBECTL}} get pods -n istio-system -l app=istiod
+        {{.KUBECTL}} get pods -n ticketing-concert -l app=concert-service
+        printf '%s\n' 'Prometheus queries to verify after traffic exists:'
+        printf '%s\n' '  istio_requests_total'
+        printf '%s\n' '  istio_request_duration_milliseconds_bucket'
+        printf '%s\n' '  pilot_xds_pushes'
+
+  canary:render:
+    desc: reservation-service canary Helm/VirtualService/DestinationRule manifest를 렌더링합니다.
+    cmds:
+      - |
+        set -eu
+        {{.HELM}} template reservation-canary {{.SERVICE_CHART}} \
+          -f {{.VALUES_BASE}} \
+          -f values/env/aws-dev.yaml \
+          -f values/services/reservation.yaml \
+          -f values/scenarios/istio/reservation-canary-v2.yaml >/dev/null
+        {{.KUBECTL}} kustomize {{.ISTIO_PLATFORM}}/traffic/reservation >/dev/null
+        for scenario in canary-20 canary-50 canary-100 rollback; do
+          {{.KUBECTL}} kustomize "{{.ISTIO_PLATFORM}}/traffic/reservation/scenarios/${scenario}" >/dev/null
+        done
+
+  canary:check:
+    desc: reservation-service canary routing과 v1/v2 Pod label 상태를 확인합니다.
+    cmds:
+      - |
+        set -eu
+        {{.KUBECTL}} get destinationrule -n ticketing-reservation reservation-service
+        {{.KUBECTL}} get virtualservice -n ticketing-reservation reservation-service
+        {{.KUBECTL}} get pods -n ticketing-reservation -l app=reservation-service --show-labels
+        printf '%s\n' 'Expected subsets:'
+        printf '%s\n' '  version=v1 -> stable reservation-service deployment'
+        printf '%s\n' '  version=v2 -> reservation-service-v2 canary deployment'
+        printf '%s\n' 'Scenario manifests:'
+        printf '%s\n' '  platform/istio/traffic/reservation/scenarios/canary-20'
+        printf '%s\n' '  platform/istio/traffic/reservation/scenarios/canary-50'
+        printf '%s\n' '  platform/istio/traffic/reservation/scenarios/canary-100'
+        printf '%s\n' '  platform/istio/traffic/reservation/scenarios/rollback'
+
   dev:kong:check:
     internal: true
     desc: Docker Desktop dev용 Kong chart values와 Kong shared resource 렌더링을 검증합니다.
@@ -567,7 +671,7 @@ tasks:
         service='{{.KONG_PROXY_SERVICE}}'
         for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
           address="$({{.KUBECTL}} -n "${namespace}" get svc "${service}" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
-          if [ -n "${address}" ] && curl -sS --max-time 2 -o /dev/null http://localhost/; then
+          if [ -n "${address}" ] && curl -fsS --max-time 2 http://localhost/ >/dev/null; then
             printf 'Kong proxy is available at http://localhost/ (LoadBalancer IP: %s)\n' "${address}"
             exit 0
           fi
@@ -629,7 +733,9 @@ tasks:
           ' "$1"
         }
         for service_file in values/services/*.yaml; do
-          service="$(basename "${service_file}" .yaml)"
+          service="${service_file##*/}"
+          service="${service##*\\}"
+          service="${service%.yaml}"
           namespace="$(app_field "${service_file}" namespace)"
           release="${service}-{{.LOCAL_DOCKER_DESKTOP_RELEASE_SUFFIX}}"
           {{.HELM}} uninstall "${release}" --namespace "${namespace}" --ignore-not-found
@@ -701,7 +807,9 @@ tasks:
       - |
         set -eu
         for service_file in values/services/*.yaml; do
-          service="$(basename "${service_file}" .yaml)"
+          service="${service_file##*/}"
+          service="${service##*\\}"
+          service="${service%.yaml}"
           for env in {{.ENVIRONMENTS}}; do
             extra_values=""
             if [ -f "values/overrides/${env}/${service}.yaml" ]; then
@@ -747,7 +855,9 @@ tasks:
           exit 2
         fi
         for service_file in values/services/*.yaml; do
-          service="$(basename "${service_file}" .yaml)"
+          service="${service_file##*/}"
+          service="${service##*\\}"
+          service="${service%.yaml}"
           task helm:template:one SERVICE="${service}" ENV="${env}"
         done
 
@@ -786,7 +896,9 @@ tasks:
       - |
         set -eu
         for service_file in values/services/*.yaml; do
-          service="$(basename "${service_file}" .yaml)"
+          service="${service_file##*/}"
+          service="${service##*\\}"
+          service="${service%.yaml}"
           for scenario in {{.AWS_SCENARIOS}}; do
             {{.HELM}} template "${service}-aws-scenario-${scenario}" {{.SERVICE_CHART}} \
               -f {{.VALUES_BASE}} \
@@ -824,7 +936,9 @@ tasks:
           exit 0
         fi
         for service_file in values/services/*.yaml; do
-          service="$(basename "${service_file}" .yaml)"
+          service="${service_file##*/}"
+          service="${service##*\\}"
+          service="${service%.yaml}"
           {{.HELM}} template "${service}-aws-scenario-${scenario}" {{.SERVICE_CHART}} \
             -f {{.VALUES_BASE}} \
             -f values/scenarios/aws/base.yaml \
@@ -839,6 +953,7 @@ tasks:
       - '{{.KUBECTL}} kustomize platform/data >/dev/null'
       - '{{.KUBECTL}} kustomize platform/kong >/dev/null'
       - '{{.KUBECTL}} kustomize platform/monitoring >/dev/null'
+      - task istio:render
 
   argo:validate:
     cmds:
@@ -854,7 +969,7 @@ tasks:
           done < "${file}"
           return 1
         }
-        for file in argo/*.yaml argo/applications/*/*.yaml argo/applications/*/services/*.yaml argo/applications/*/platform/*.yaml; do
+        for file in argo/*.yaml argo/applications/*/*.yaml argo/applications/*/platform/*.yaml argo/applications/*/services/*.yaml platform/istio/argocd/*.yaml; do
           [ -e "${file}" ] || continue
           if [ ! -s "${file}" ]; then
             printf 'Empty Argo manifest: %s\n' "${file}" >&2
