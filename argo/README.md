@@ -17,10 +17,16 @@
 
 ## 플랫폼 Application
 
+`argo/applications/aws-dev/platform/aws-ebs-csi-driver.yaml`은 self-managed kubeadm EC2 클러스터에서 EBS 동적 PVC를 처리할 AWS EBS CSI driver를 Helm chart로 배포한다.
+
+`argo/applications/aws-dev/platform/storage.yaml`은 `medikong-aws-gp3` StorageClass를 plain manifest로 배포한다. StorageClass는 chart 기본값이 아니라 이 GitOps manifest가 소유한다.
+
 `argo/applications/aws-dev/platform/monitoring.yaml`은 `monitoring` namespace 기준 Prometheus 기본 스택을 배포한다.
 
 `argo/applications/aws-dev/platform/tempo.yaml`, `argo/applications/aws-dev/platform/loki.yaml`, `argo/applications/aws-dev/platform/collector.yaml`은 `observability` namespace 기준 Tempo/Loki backend와 OpenTelemetry Collector trace pipeline을 Helm chart로 배포한다.
 
+- `aws-ebs-csi-driver-aws-dev`는 sync wave `-31`로 EBS CSI driver를 먼저 설치한다.
+- `storage-aws-dev`는 sync wave `-30`으로 `medikong-aws-gp3` StorageClass를 적용한다.
 - `platform/monitoring` Kustomize source가 namespace를 만든다.
 - `prometheus-community/kube-prometheus-stack` Helm source가 Prometheus Operator CRD와 chart 리소스를 만든다.
 - sync wave `-20`으로 서비스 Application보다 먼저 생성한다.

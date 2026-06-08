@@ -77,15 +77,16 @@ audit log
 aws-dev platform Application은 다음 순서로 붙인다.
 
 ```text
-storage-aws-dev      sync-wave -30
-monitoring-aws-dev   sync-wave -20
-tempo-aws-dev        sync-wave -18
-loki-aws-dev         sync-wave -18
+aws-ebs-csi-driver-aws-dev       sync-wave -31
+storage-aws-dev                  sync-wave -30
+monitoring-aws-dev               sync-wave -20
+tempo-aws-dev                    sync-wave -18
+loki-aws-dev                     sync-wave -18
 opentelemetry-collector-aws-dev  sync-wave -17
 service applications service path
 ```
 
-`storage-aws-dev`는 `platform/storage`의 EBS CSI `gp3` StorageClass를 먼저 적용한다. Tempo/Loki aws-dev values는 `medikong-aws-gp3`를 명시하므로 클러스터 default StorageClass가 없어도 의도한 AWS EBS 동적 PVC 정책을 사용한다.
+`aws-ebs-csi-driver-aws-dev`는 self-managed kubeadm EC2 클러스터에 EBS CSI driver를 먼저 설치한다. 이어서 `storage-aws-dev`가 `platform/storage`의 EBS CSI `gp3` StorageClass를 적용한다. Tempo/Loki aws-dev values는 `medikong-aws-gp3`를 명시하므로 클러스터 default StorageClass가 없어도 의도한 AWS EBS 동적 PVC 정책을 사용한다.
 
 Tempo/Loki Application은 `CreateNamespace=true`와 `managedNamespaceMetadata`로 `observability` namespace를 만든다. Grafana datasource는 `platform/monitoring/values/kube-prometheus-stack.yaml`에서 Tempo/Loki service DNS를 바라본다.
 
