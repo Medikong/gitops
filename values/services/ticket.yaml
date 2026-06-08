@@ -15,13 +15,20 @@ deployment:
     sidecar.istio.io/inject: "true"
   podAnnotations:
     sidecar.istio.io/inject: "true"
-    sidecar.istio.io/proxyCPU: 25m
-    sidecar.istio.io/proxyMemory: 64Mi
-    sidecar.istio.io/proxyCPULimit: 200m
-    sidecar.istio.io/proxyMemoryLimit: 256Mi
+    sidecar.istio.io/proxyCPU: 5m
+    sidecar.istio.io/proxyMemory: 32Mi
+    sidecar.istio.io/proxyCPULimit: 100m
+    sidecar.istio.io/proxyMemoryLimit: 128Mi
 
 container:
   port: 8085
+  resources:
+    requests:
+      cpu: 25m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
   env:
     - name: DATABASE_URL
       value: postgresql+psycopg://user:password@ticket-db:5432/ticket_db
