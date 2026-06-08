@@ -17,6 +17,8 @@ container:
   env:
     - name: DATABASE_URL
       value: postgresql+psycopg://user:password@concert-db:5432/concert_db
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: http://opentelemetry-collector.observability.svc.cluster.local:4317
 
 service:
   port: 8082
