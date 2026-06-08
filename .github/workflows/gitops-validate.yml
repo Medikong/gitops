@@ -36,4 +36,13 @@ jobs:
         uses: arduino/setup-task@v2
 
       - name: Validate GitOps manifests
-        run: task validate
+        run: |
+          for attempt in 1 2 3; do
+            if task validate; then
+              exit 0
+            fi
+            if [ "${attempt}" = "3" ]; then
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done
