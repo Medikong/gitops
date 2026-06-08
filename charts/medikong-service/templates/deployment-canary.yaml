@@ -1,6 +1,8 @@
-{{- if .Values.canary.enabled }}
-{{- $canaryVersion := default "v2" .Values.canary.version }}
-{{- $canaryName := printf "%s-%s" .Values.app.name (default $canaryVersion .Values.canary.nameSuffix) }}
+{{- $canary := default dict .Values.canary }}
+{{- if default false $canary.enabled }}
+{{- $canaryImage := default dict $canary.image }}
+{{- $canaryVersion := default "v2" $canary.version }}
+{{- $canaryName := printf "%s-%s" .Values.app.name (default $canaryVersion $canary.nameSuffix) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,7 +19,7 @@ metadata:
 {{ toYaml . | nindent 4 }}
 {{- end }}
 spec:
-  replicas: {{ .Values.canary.replicas }}
+  replicas: {{ default 1 $canary.replicas }}
   selector:
     matchLabels:
       app: {{ .Values.app.name | quote }}
@@ -36,10 +38,10 @@ spec:
 {{- with .Values.app.labels }}
 {{ toYaml . | nindent 8 }}
 {{- end }}
-{{- with .Values.canary.podLabels }}
+{{- with $canary.podLabels }}
 {{ toYaml . | nindent 8 }}
 {{- end }}
-{{- with .Values.canary.podAnnotations }}
+{{- with $canary.podAnnotations }}
       annotations:
 {{ toYaml . | nindent 8 }}
 {{- end }}
@@ -59,9 +61,9 @@ spec:
       containers:
         - name: {{ default .Values.app.name .Values.container.name | quote }}
 {{- if .Values.image.registry }}
-          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ default .Values.image.tag .Values.canary.image.tag }}"
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ default .Values.image.tag $canaryImage.tag }}"
 {{- else }}
-          image: "{{ .Values.image.repository }}:{{ default .Values.image.tag .Values.canary.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ default .Values.image.tag $canaryImage.tag }}"
 {{- end }}
           imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
           ports:
@@ -84,7 +86,7 @@ spec:
           livenessProbe:
 {{ toYaml . | nindent 12 }}
 {{- end }}
-{{- with default .Values.container.resources .Values.canary.resources }}
+{{- with default .Values.container.resources $canary.resources }}
           resources:
 {{ toYaml . | nindent 12 }}
 {{- end }}
