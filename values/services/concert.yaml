@@ -7,7 +7,7 @@ app:
 
 image:
   repository: concert-service
-  tag: 0545902b3a052a89c58d18c6b1803830259329fb
+  tag: 1f4953da26532aceb8c04e9dec35e723d8aed2ae
 
 deployment:
   replicas: 2
