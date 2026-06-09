@@ -41,7 +41,7 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
       - name: Discord 보안 스캔 알림
-        if: always()
+        if: failure()
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
