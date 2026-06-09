@@ -40,3 +40,12 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
+      - name: Discord 보안 스캔 알림
+        if: failure()
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          status: failure
+          title: "🚨 K8s 보안 취약점 발견"
+          description: "K8s 매니페스트에서 HIGH/CRITICAL 취약점이 발견되었습니다."
+          color: 0xff0000
