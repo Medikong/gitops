@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: monitoring
 resources:
   - manifests/namespace.yaml
+  - manifests/grafana-ingress.yaml
   - manifests/istio-mesh-podmonitors.yaml
   - manifests/prometheusrules/system-kubernetes-alerts.yaml
 generatorOptions:

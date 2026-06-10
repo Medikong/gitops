@@ -21,6 +21,10 @@ defaultRules:
 
 grafana:
   enabled: true
+  grafana.ini:
+    server:
+      root_url: http://13.125.191.132:32407/grafana/
+      serve_from_sub_path: true
   admin:
     existingSecret: grafana-admin-credentials
     userKey: admin-user
