@@ -71,3 +71,8 @@ networkPolicy:
       ports:
         - protocol: TCP
           port: 8084
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
