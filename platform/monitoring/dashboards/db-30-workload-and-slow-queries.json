@@ -112,8 +112,8 @@
   },
   "panels": [
     {
-      "id": 1,
-      "title": "1. PostgreSQL Workload",
+      "id": 100,
+      "title": "0. Signal Readiness",
       "type": "row",
       "collapsed": false,
       "gridPos": {
@@ -125,12 +125,289 @@
       "panels": []
     },
     {
+      "id": 101,
+      "title": "PostgreSQL Exporter Series",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "count(pg_up) or vector(0)",
+          "legendFormat": "",
+          "range": false,
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 102,
+      "title": "MongoDB Exporter Series",
+      "type": "stat",
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "count(mongodb_up) or vector(0)",
+          "legendFormat": "",
+          "range": false,
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 103,
+      "title": "App DB Metric Series",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "count(db_client_operation_duration_seconds_count{service_environment=~\"$environment\",service_name=~\"$service\"}) or vector(0)",
+          "legendFormat": "",
+          "range": false,
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 104,
+      "title": "Slow DB Logs",
+      "type": "stat",
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "sum(count_over_time({k8s_namespace_name=~\"$namespace\", service_name=~\"$service\", k8s_container_name=~\".*-service\"} | json | event=\"db.query.slow\" [$__range])) or vector(0)",
+          "legendFormat": "",
+          "range": false,
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 1,
+      "title": "1. PostgreSQL Workload",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
       "id": 2,
       "title": "PostgreSQL Active / Idle Connections",
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 1,
+        "y": 7,
         "w": 12,
         "h": 7
       },
@@ -196,7 +473,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 1,
+        "y": 7,
         "w": 12,
         "h": 7
       },
@@ -273,7 +550,7 @@
       "type": "bargauge",
       "gridPos": {
         "x": 0,
-        "y": 8,
+        "y": 14,
         "w": 8,
         "h": 7
       },
@@ -341,7 +618,7 @@
       "type": "bargauge",
       "gridPos": {
         "x": 8,
-        "y": 8,
+        "y": 14,
         "w": 8,
         "h": 7
       },
@@ -409,7 +686,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 16,
-        "y": 8,
+        "y": 14,
         "w": 8,
         "h": 7
       },
@@ -476,7 +753,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 15,
+        "y": 21,
         "w": 24,
         "h": 1
       },
@@ -488,7 +765,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 16,
+        "y": 22,
         "w": 8,
         "h": 7
       },
@@ -554,7 +831,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 8,
-        "y": 16,
+        "y": 22,
         "w": 8,
         "h": 7
       },
@@ -620,7 +897,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 16,
-        "y": 16,
+        "y": 22,
         "w": 8,
         "h": 7
       },
@@ -686,7 +963,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 23,
+        "y": 29,
         "w": 12,
         "h": 7
       },
@@ -752,7 +1029,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 23,
+        "y": 29,
         "w": 12,
         "h": 7
       },
@@ -819,7 +1096,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 30,
+        "y": 36,
         "w": 24,
         "h": 1
       },
@@ -831,7 +1108,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 31,
+        "y": 37,
         "w": 12,
         "h": 7
       },
@@ -896,7 +1173,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 31,
+        "y": 37,
         "w": 12,
         "h": 7
       },
@@ -961,7 +1238,7 @@
       "type": "table",
       "gridPos": {
         "x": 0,
-        "y": 38,
+        "y": 44,
         "w": 12,
         "h": 9
       },
@@ -1015,7 +1292,7 @@
       "type": "logs",
       "gridPos": {
         "x": 12,
-        "y": 38,
+        "y": 44,
         "w": 12,
         "h": 9
       },
@@ -1070,7 +1347,7 @@
       "type": "table",
       "gridPos": {
         "x": 0,
-        "y": 47,
+        "y": 53,
         "w": 24,
         "h": 8
       },
