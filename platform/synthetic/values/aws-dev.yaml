@@ -1,0 +1,19 @@
+environment: aws-dev
+
+image:
+  registry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
+  repository: synthetic-traffic
+  tag: latest
+  pullPolicy: Always
+  pullSecrets:
+    - ecr-registry
+
+cronJob:
+  schedule: "*/5 * * * *"
+
+synthetic:
+  scenario: external-journey
+  target: external
+  baseUrl: http://medikong-default-kong-nlb-c17a54e23efd293c.elb.ap-northeast-2.amazonaws.com:32407
+  internalBaseUrl: http://kong-kong-proxy.kong.svc.cluster.local
+  externalBaseUrl: http://medikong-default-kong-nlb-c17a54e23efd293c.elb.ap-northeast-2.amazonaws.com:32407

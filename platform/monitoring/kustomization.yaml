@@ -22,3 +22,12 @@ configMapGenerator:
       - dashboards/11-pod-container-resources.json
       - dashboards/12-node-pressure-overview.json
       - dashboards/payment-service-metrics.json
+  - name: medikong-logs-dashboards
+    files:
+      - dashboards/logs-10-overview.json
+      - dashboards/logs-20-services.json
+      - dashboards/logs-30-service-errors.json
+      - dashboards/logs-40-drilldown.json
+      - dashboards/logs-50-synthetic.json
+      - dashboards/logs-60-business-flow.json
+      - dashboards/logs-70-platform.json

@@ -4,8 +4,8 @@
 imageMirror:
   images:
     - name: opentelemetry-collector
-      description: Upstream OpenTelemetry Collector trace pipeline
-      source: docker.io/otel/opentelemetry-collector:0.153.0
+      description: OpenTelemetry Collector contrib trace and log pipeline
+      source: docker.io/otel/opentelemetry-collector-contrib:0.153.0
       targetRegistry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
-      targetRepository: otel/opentelemetry-collector
+      targetRepository: otel/opentelemetry-collector-contrib
       tag: 0.153.0

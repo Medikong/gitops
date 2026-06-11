@@ -29,6 +29,9 @@ includes:
   observability:
     taskfile: platform/observability/Taskfile.yml
     dir: platform/observability
+  synthetic:
+    taskfile: platform/synthetic/Taskfile.yml
+    dir: platform/synthetic
 
 tasks:
   default:
@@ -75,6 +78,17 @@ tasks:
     desc: Docker Desktop dev에 Tempo/Loki backend와 Collector trace pipeline을 배포합니다.
     cmds:
       - task: observability:up
+
+  dev:synthetic:
+    desc: Docker Desktop dev에 synthetic k6 CronJob을 배포합니다.
+    cmds:
+      - task: dev:registry
+      - task: synthetic:dev
+
+  dev:synthetic:run:
+    desc: 배포된 synthetic CronJob에서 수동 Job을 1회 실행하고 로그를 봅니다.
+    cmds:
+      - task: synthetic:run
 
   dev:platform:
     internal: true
