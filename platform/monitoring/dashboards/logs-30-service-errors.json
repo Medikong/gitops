@@ -84,8 +84,8 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({k8s_namespace_name=\"ticketing-notification\", service_name=\"notification-service\", k8s_container_name=~\".*-service\"} | json | severity=~\"ERROR|error|CRITICAL|critical|FATAL|fatal\" [$__range])) or vector(0)",
-          "legendFormat": "notification-service",
+          "expr": "sum by (service_name) (count_over_time({k8s_namespace_name=\"ticketing-notification\", service_name=\"notification-service\", k8s_container_name=~\".*-service\"} | json | severity=~\"ERROR|error|CRITICAL|critical|FATAL|fatal\" [$__range])) or label_replace(vector(0), \"service_name\", \"notification-service\", \"\", \"\")",
+          "legendFormat": "{{service_name}}",
           "range": false,
           "refId": "A",
           "instant": true
@@ -96,8 +96,8 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({k8s_namespace_name=\"ticketing-payment\", service_name=\"payment-service\", k8s_container_name=~\".*-service\"} | json | severity=~\"ERROR|error|CRITICAL|critical|FATAL|fatal\" [$__range])) or vector(0)",
-          "legendFormat": "payment-service",
+          "expr": "sum by (service_name) (count_over_time({k8s_namespace_name=\"ticketing-payment\", service_name=\"payment-service\", k8s_container_name=~\".*-service\"} | json | severity=~\"ERROR|error|CRITICAL|critical|FATAL|fatal\" [$__range])) or label_replace(vector(0), \"service_name\", \"payment-service\", \"\", \"\")",
+          "legendFormat": "{{service_name}}",
           "range": false,
           "refId": "B",
           "instant": true
@@ -108,8 +108,8 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({k8s_namespace_name=\"ticketing-reservation\", service_name=\"reservation-service\", k8s_container_name=~\".*-service\"} | json | severity=~\"ERROR|error|CRITICAL|critical|FATAL|fatal\" [$__range])) or vector(0)",
-          "legendFormat": "reservation-service",
+          "expr": "sum by (service_name) (count_over_time({k8s_namespace_name=\"ticketing-reservation\", service_name=\"reservation-service\", k8s_container_name=~\".*-service\"} | json | severity=~\"ERROR|error|CRITICAL|critical|FATAL|fatal\" [$__range])) or label_replace(vector(0), \"service_name\", \"reservation-service\", \"\", \"\")",
+          "legendFormat": "{{service_name}}",
           "range": false,
           "refId": "C",
           "instant": true
@@ -120,8 +120,8 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({k8s_namespace_name=\"ticketing-auth\", service_name=\"auth-service\", k8s_container_name=~\".*-service\"} | json | severity=~\"ERROR|error|CRITICAL|critical|FATAL|fatal\" [$__range])) or vector(0)",
-          "legendFormat": "auth-service",
+          "expr": "sum by (service_name) (count_over_time({k8s_namespace_name=\"ticketing-auth\", service_name=\"auth-service\", k8s_container_name=~\".*-service\"} | json | severity=~\"ERROR|error|CRITICAL|critical|FATAL|fatal\" [$__range])) or label_replace(vector(0), \"service_name\", \"auth-service\", \"\", \"\")",
+          "legendFormat": "{{service_name}}",
           "range": false,
           "refId": "D",
           "instant": true
@@ -132,8 +132,8 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({k8s_namespace_name=\"ticketing-concert\", service_name=\"concert-service\", k8s_container_name=~\".*-service\"} | json | severity=~\"ERROR|error|CRITICAL|critical|FATAL|fatal\" [$__range])) or vector(0)",
-          "legendFormat": "concert-service",
+          "expr": "sum by (service_name) (count_over_time({k8s_namespace_name=\"ticketing-concert\", service_name=\"concert-service\", k8s_container_name=~\".*-service\"} | json | severity=~\"ERROR|error|CRITICAL|critical|FATAL|fatal\" [$__range])) or label_replace(vector(0), \"service_name\", \"concert-service\", \"\", \"\")",
+          "legendFormat": "{{service_name}}",
           "range": false,
           "refId": "E",
           "instant": true
@@ -144,8 +144,8 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({k8s_namespace_name=\"ticketing-ticket\", service_name=\"ticket-service\", k8s_container_name=~\".*-service\"} | json | severity=~\"ERROR|error|CRITICAL|critical|FATAL|fatal\" [$__range])) or vector(0)",
-          "legendFormat": "ticket-service",
+          "expr": "sum by (service_name) (count_over_time({k8s_namespace_name=\"ticketing-ticket\", service_name=\"ticket-service\", k8s_container_name=~\".*-service\"} | json | severity=~\"ERROR|error|CRITICAL|critical|FATAL|fatal\" [$__range])) or label_replace(vector(0), \"service_name\", \"ticket-service\", \"\", \"\")",
+          "legendFormat": "{{service_name}}",
           "range": false,
           "refId": "F",
           "instant": true
