@@ -51,24 +51,38 @@ PodMonitor는 `monitoring` namespace에 둔다. Prometheus 설정이 `podMonitor
 
 ## Kong Gateway monitoring
 
-Kong Gateway는 Kong prometheus plugin과 `kong-kong-metrics` Service를 통해 metric을 노출한다. `manifests/kong-servicemonitor.yaml`은 `kong` namespace의 `kong-kong-metrics` Service를 선택하고 `cmetrics` port의 `/metrics`를 scrape한다.
+Kong Gateway는 두 종류의 metric을 노출한다.
+
+- Gateway request metric: Kong prometheus plugin이 proxy container의 status listener `8100/metrics`에 노출한다.
+- Ingress Controller metric: Kong Ingress Controller가 `10255/metrics`에 controller-runtime reconcile 상태를 노출한다.
+
+`manifests/kong-servicemonitor.yaml`은 `kong` namespace의 `enable-metrics=true` Service를 선택하고, Pod targetPort 기준으로 `status`와 `cmetrics`를 함께 scrape한다. `status` target은 API Gateway 요청량, latency, status code 같은 실제 외부 진입점 지표를 제공하고, `cmetrics` target은 Kong Ingress Controller가 Kubernetes Ingress/KongPlugin 변경을 정상 반영하는지 보는 운영 지표를 제공한다.
 
 수집 대상:
 
 ```text
-kong-kong-metrics
+kong-kong-proxy
   - namespace: kong
   - endpoint: /metrics
-  - port: cmetrics
+  - targetPort: status
+  - purpose: Gateway request metric
+
+kong ingress-controller container
+  - namespace: kong
+  - endpoint: /metrics
+  - targetPort: cmetrics
+  - purpose: controller reconcile metric
 ```
 
 Prometheus에서 확인할 query:
 
 ```promql
-{__name__=~".*kong.*"}
+up{job=~"kong.*|monitoring/kong-gateway"}
+kong_bandwidth_bytes
 kong_http_requests_total
-kong_kong_latency_ms_bucket
+kong_latency_ms_bucket
 kong_upstream_latency_ms_bucket
+controller_runtime_reconcile_total
 ```
 
 Kong metric은 Gateway 레벨 요청 수, status code, Kong latency, upstream latency, plugin 처리 상태를 확인하는 데 사용한다. Loki 로그가 개별 요청의 상세 기록이라면, Kong metric은 외부 진입점 전체의 숫자 지표다.

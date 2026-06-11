@@ -13,9 +13,13 @@ spec:
       - kong
   selector:
     matchLabels:
+      enable-metrics: "true"
       app.kubernetes.io/instance: kong
       app.kubernetes.io/name: kong
   endpoints:
-    - port: cmetrics
+    - targetPort: status
+      path: /metrics
+      interval: 30s
+    - targetPort: cmetrics
       path: /metrics
       interval: 30s
