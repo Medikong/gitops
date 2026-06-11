@@ -52,12 +52,14 @@ ports:
     enabled: true
     containerPort: 4317
     servicePort: 4317
+    hostPort: null
     protocol: TCP
     appProtocol: grpc
   otlp-http:
     enabled: true
     containerPort: 4318
     servicePort: 4318
+    hostPort: null
     protocol: TCP
   jaeger-compact:
     enabled: false
@@ -92,6 +94,7 @@ alternateConfig:
         - id: json-body-parser
           type: json_parser
           parse_from: body
+          parse_to: attributes
           if: body matches "^\\{"
     otlp:
       protocols:
@@ -140,6 +143,24 @@ alternateConfig:
       check_interval: 1s
       limit_percentage: 75
       spike_limit_percentage: 20
+    filter/drop_low_value_access:
+      error_mode: ignore
+      logs:
+        log_record:
+          - attributes["event"] == "http.request.completed" and attributes["log.policy"] == "drop"
+          - attributes["event"] == "http.request.completed" and attributes["log.policy"] == "sample"
+    filter/access_sample_candidates:
+      error_mode: ignore
+      logs:
+        log_record:
+          - attributes["event"] != "http.request.completed"
+          - attributes["log.policy"] != "sample"
+    probabilistic_sampler/access_success:
+      sampling_percentage: 10
+      hash_seed: 32
+      fail_closed: false
+      attribute_source: record
+      from_attribute: request_id
     batch:
       timeout: 5s
       send_batch_size: 8192
@@ -165,16 +186,6 @@ alternateConfig:
                   host: 0.0.0.0
                   port: 8888
     pipelines:
-      logs:
-        receivers:
-          - filelog
-        processors:
-          - k8sattributes
-          - transform/log_labels
-          - memory_limiter
-          - batch
-        exporters:
-          - otlphttp/loki
       traces:
         receivers:
           - otlp
@@ -184,6 +195,29 @@ alternateConfig:
           - batch
         exporters:
           - otlp/tempo
+      logs/keep:
+        receivers:
+          - filelog
+        processors:
+          - k8sattributes
+          - transform/log_labels
+          - memory_limiter
+          - filter/drop_low_value_access
+          - batch
+        exporters:
+          - otlphttp/loki
+      logs/sampled-access:
+        receivers:
+          - filelog
+        processors:
+          - k8sattributes
+          - transform/log_labels
+          - memory_limiter
+          - filter/access_sample_candidates
+          - probabilistic_sampler/access_success
+          - batch
+        exporters:
+          - otlphttp/loki
 
 serviceMonitor:
   enabled: true
@@ -195,6 +229,9 @@ serviceMonitor:
     release: kube-prometheus-stack
 
 podSecurityContext:
+  runAsNonRoot: false
+  runAsUser: 0
+  runAsGroup: 0
   seccompProfile:
     type: RuntimeDefault
 
@@ -236,7 +273,7 @@ nodeSelector: {}
 
 podLabels:
   app.kubernetes.io/part-of: medikong
-  app.kubernetes.io/component: trace-collector
+  app.kubernetes.io/component: trace-log-collector
 
 extraManifests:
   - apiVersion: networking.k8s.io/v1
@@ -247,7 +284,7 @@ extraManifests:
       labels:
         app.kubernetes.io/name: opentelemetry-collector
         app.kubernetes.io/part-of: medikong
-        app.kubernetes.io/component: trace-collector
+        app.kubernetes.io/component: trace-log-collector
     spec:
       podSelector:
         matchLabels:

@@ -44,12 +44,14 @@ ports:
     enabled: true
     containerPort: 4317
     servicePort: 4317
+    hostPort: null
     protocol: TCP
     appProtocol: grpc
   otlp-http:
     enabled: true
     containerPort: 4318
     servicePort: 4318
+    hostPort: null
     protocol: TCP
   jaeger-compact:
     enabled: false
@@ -84,6 +86,7 @@ alternateConfig:
         - id: json-body-parser
           type: json_parser
           parse_from: body
+          parse_to: attributes
           if: body matches "^\\{"
     otlp:
       protocols:
@@ -132,6 +135,11 @@ alternateConfig:
       check_interval: 1s
       limit_percentage: 75
       spike_limit_percentage: 20
+    filter/drop_probe_success:
+      error_mode: ignore
+      logs:
+        log_record:
+          - attributes["event"] == "http.request.completed" and attributes["log.policy"] == "drop"
     batch:
       timeout: 5s
       send_batch_size: 8192
@@ -164,6 +172,7 @@ alternateConfig:
           - k8sattributes
           - transform/log_labels
           - memory_limiter
+          - filter/drop_probe_success
           - batch
         exporters:
           - otlphttp/loki
@@ -187,6 +196,9 @@ serviceMonitor:
     release: kube-prometheus-stack
 
 podSecurityContext:
+  runAsNonRoot: false
+  runAsUser: 0
+  runAsGroup: 0
   seccompProfile:
     type: RuntimeDefault
 
@@ -224,7 +236,7 @@ resources:
 
 podLabels:
   app.kubernetes.io/part-of: medikong
-  app.kubernetes.io/component: trace-collector
+  app.kubernetes.io/component: trace-log-collector
 
 extraManifests:
   - apiVersion: networking.k8s.io/v1
@@ -235,7 +247,7 @@ extraManifests:
       labels:
         app.kubernetes.io/name: opentelemetry-collector
         app.kubernetes.io/part-of: medikong
-        app.kubernetes.io/component: trace-collector
+        app.kubernetes.io/component: trace-log-collector
     spec:
       podSelector:
         matchLabels:
