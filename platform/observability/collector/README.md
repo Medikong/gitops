@@ -1,6 +1,6 @@
 # OpenTelemetry Collector trace pipeline
 
-`platform/observability/collector`는 서비스 파드가 보낸 trace를 받는 OpenTelemetry Collector 배포 기준을 둔다.
+`platform/observability/collector`는 서비스 파드가 보낸 trace를 받고 Kubernetes container log를 Loki로 전달하는 OpenTelemetry Collector 배포 기준을 둔다.
 
 ## 범위
 
@@ -9,7 +9,7 @@
 - `image-mirror/aws-dev.yaml`: 관측성 image mirror workflow가 읽는 Collector image mirror 기준이다. OpenTelemetry Collector Helm chart는 values schema가 엄격해서 `imageMirror` 같은 chart 외부 key를 values 파일에 둘 수 없으므로 이 파일로 분리한다.
 - `Taskfile.yml`: Helm chart 렌더링과 선택적 로컬 배포 명령을 둔다.
 
-Loki filelog receiver, metric scrape, audit log pipeline은 이 Collector trace pipeline에 섞지 않는다.
+application/k6 log는 stdout/stderr JSON line을 기준으로 하고, Collector가 Kubernetes node의 container log 파일을 읽어 Loki로 전달한다. audit log pipeline과 k6 Prometheus remote write는 이 범위에 포함하지 않는다.
 
 ## 배포 기준
 
@@ -20,17 +20,26 @@ trace path
   -> OpenTelemetry Collector
   -> Tempo
   -> Grafana
+
+log path
+  application/k6 stdout/stderr JSON line
+  -> Kubernetes container log
+  -> OpenTelemetry Collector filelog receiver
+  -> Loki OTLP endpoint
+  -> Grafana
 ```
 
 - namespace: `observability`
 - Helm chart: `open-telemetry/opentelemetry-collector`
 - chart version: `0.158.0`
-- implementation: upstream OpenTelemetry Collector
-- image: `otel/opentelemetry-collector:0.153.0`
+- implementation: OpenTelemetry Collector contrib
+- image: `otel/opentelemetry-collector-contrib:0.153.0`
 - aws-dev image registry: ECR
 - receiver: OTLP gRPC `4317`, OTLP HTTP `4318`
+- log receiver: `filelog` on `/var/log/pods/*/*/*.log`
 - processor: `memory_limiter`, `batch`
 - exporter: OTLP gRPC to `tempo.observability.svc.cluster.local:4317`
+- log exporter: OTLP HTTP to `http://loki.observability.svc.cluster.local:3100/otlp`
 - self-metrics: ServiceMonitor scrape on `:8888/metrics`
 - health check: `:13133/`
 
@@ -68,6 +77,7 @@ ticketing API namespace pods
 
 opentelemetry-collector
   -> tempo:4317
+  -> loki:3100
 
 monitoring namespace
   -> opentelemetry-collector:8888
@@ -95,6 +105,12 @@ task --taskfile platform/observability/collector/Taskfile.yml render
 task observability:render
 task platform:render
 task validate
+```
+
+Collector config 자체는 contrib image로 검증할 수 있다.
+
+```bash
+docker run --rm --entrypoint /otelcol-contrib otel/opentelemetry-collector-contrib:0.153.0 validate --config=/conf/relay.yaml
 ```
 
 live cluster 배포는 별도로 요청받았을 때만 실행한다.
