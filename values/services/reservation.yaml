@@ -7,7 +7,7 @@ app:
 
 image:
   repository: reservation-service
-  tag: e025e83727debd0cadf15d8d45685299769ac8f6
+  tag: c5b8461da38b922fe0cf0b3cc224b226a7ebe297
 
 deployment:
   replicas: 1
