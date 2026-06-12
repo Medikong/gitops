@@ -13,7 +13,7 @@ cronJob:
 
 synthetic:
   scenario: external-journey
-  target: external
-  baseUrl: http://medikong-default-kong-nlb-c17a54e23efd293c.elb.ap-northeast-2.amazonaws.com:32407
+  target: internal
+  baseUrl: http://kong-kong-proxy.kong.svc.cluster.local
   internalBaseUrl: http://kong-kong-proxy.kong.svc.cluster.local
-  externalBaseUrl: http://medikong-default-kong-nlb-c17a54e23efd293c.elb.ap-northeast-2.amazonaws.com:32407
+  externalBaseUrl: http://kong-kong-proxy.kong.svc.cluster.local
