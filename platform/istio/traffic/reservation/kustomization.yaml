@@ -3,4 +3,4 @@ kind: Kustomization
 
 resources:
   - destination-rule.yaml
-  - scenarios/fault-delay/virtual-service.yaml
+  - virtual-service-stable.yaml
