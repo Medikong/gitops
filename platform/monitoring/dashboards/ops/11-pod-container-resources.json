@@ -1,15 +1,16 @@
 {
-  "uid": "medikong-node-pressure-overview",
-  "title": "Infra Health 12 - Node Pressure Overview",
+  "uid": "medikong-pod-container-resources",
+  "title": "11 Pod and Container Resources",
   "tags": [
     "medikong",
     "kubernetes",
-    "node",
+    "pod",
+    "container",
     "pressure"
   ],
   "timezone": "browser",
   "schemaVersion": 41,
-  "version": 2,
+  "version": 4,
   "refresh": "30s",
   "time": {
     "from": "now-1h",
@@ -18,15 +19,34 @@
   "templating": {
     "list": [
       {
-        "name": "node",
-        "label": "Node",
+        "name": "namespace",
+        "label": "Namespace",
         "type": "query",
         "datasource": {
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "query": "label_values(kube_node_info, node)",
-        "definition": "label_values(kube_node_info, node)",
+        "query": "label_values(kube_pod_info, namespace)",
+        "definition": "label_values(kube_pod_info, namespace)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "pod",
+        "label": "Pod",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(kube_pod_info{namespace=~\"$namespace\"}, pod)",
+        "definition": "label_values(kube_pod_info{namespace=~\"$namespace\"}, pod)",
         "refresh": 1,
         "includeAll": true,
         "multi": true,
@@ -41,7 +61,7 @@
   "panels": [
     {
       "id": 1,
-      "title": "Not Ready Nodes",
+      "title": "Containers Restarted 30m",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -83,8 +103,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(kube_node_status_condition{node=~\"$node\",condition=\"Ready\",status=\"false\"})",
-          "legendFormat": "Not Ready Nodes",
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[30m]))",
+          "legendFormat": "Containers Restarted 30m",
           "range": false,
           "refId": "A",
           "instant": true
@@ -107,7 +127,7 @@
     },
     {
       "id": 2,
-      "title": "MemoryPressure Nodes",
+      "title": "OOMKilled Containers",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -130,8 +150,12 @@
                 "value": null
               },
               {
-                "color": "red",
+                "color": "yellow",
                 "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
               }
             ]
           }
@@ -145,8 +169,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(kube_node_status_condition{node=~\"$node\",condition=\"MemoryPressure\",status=\"true\"})",
-          "legendFormat": "MemoryPressure Nodes",
+          "expr": "sum(kube_pod_container_status_last_terminated_reason{namespace=~\"$namespace\",pod=~\"$pod\",reason=\"OOMKilled\",container!=\"\",pod!=\"\"})",
+          "legendFormat": "OOMKilled Containers",
           "range": false,
           "refId": "A",
           "instant": true
@@ -169,7 +193,7 @@
     },
     {
       "id": 3,
-      "title": "DiskPressure Nodes",
+      "title": "High Throttling Containers",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -192,8 +216,12 @@
                 "value": null
               },
               {
-                "color": "red",
+                "color": "yellow",
                 "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
               }
             ]
           }
@@ -207,8 +235,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(kube_node_status_condition{node=~\"$node\",condition=\"DiskPressure\",status=\"true\"})",
-          "legendFormat": "DiskPressure Nodes",
+          "expr": "count((100 * sum by (namespace, pod, container) (rate(container_cpu_cfs_throttled_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\",pod!=\"\",image!=\"\"}[$__rate_interval])) / clamp_min(sum by (namespace, pod, container) (rate(container_cpu_cfs_periods_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\",pod!=\"\",image!=\"\"}[$__rate_interval])), 0.001)) > 25)",
+          "legendFormat": "High Throttling Containers",
           "range": false,
           "refId": "A",
           "instant": true
@@ -231,7 +259,7 @@
     },
     {
       "id": 4,
-      "title": "PIDPressure Nodes",
+      "title": "High Memory Limit Usage",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -254,8 +282,12 @@
                 "value": null
               },
               {
-                "color": "red",
+                "color": "yellow",
                 "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
               }
             ]
           }
@@ -269,8 +301,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(kube_node_status_condition{node=~\"$node\",condition=\"PIDPressure\",status=\"true\"})",
-          "legendFormat": "PIDPressure Nodes",
+          "expr": "count((sum by (namespace, pod, container) (container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\",pod!=\"\",image!=\"\"}) / clamp_min(sum by (namespace, pod, container) (kube_pod_container_resource_limits{namespace=~\"$namespace\",pod=~\"$pod\",resource=\"memory\",unit=\"byte\",container!=\"\"}), 1)) > 0.9)",
+          "legendFormat": "High Memory Limit Usage",
           "range": false,
           "refId": "A",
           "instant": true
@@ -293,7 +325,7 @@
     },
     {
       "id": 5,
-      "title": "Node CPU Utilization",
+      "title": "CPU Usage Top 10",
       "type": "bargauge",
       "datasource": {
         "type": "prometheus",
@@ -302,12 +334,12 @@
       "gridPos": {
         "x": 0,
         "y": 4,
-        "w": 12,
+        "w": 8,
         "h": 8
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit",
+          "unit": "cores",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -325,8 +357,7 @@
               }
             ]
           },
-          "min": 0,
-          "max": 1
+          "min": 0
         },
         "overrides": []
       },
@@ -337,8 +368,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "topk(10, 1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[$__rate_interval])))",
-          "legendFormat": "{{instance}}",
+          "expr": "topk(10, sum by (namespace, pod, container) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\",pod!=\"\",image!=\"\"}[$__rate_interval])))",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "range": false,
           "refId": "A",
           "instant": true
@@ -365,16 +396,16 @@
     },
     {
       "id": 6,
-      "title": "Node Memory Utilization",
+      "title": "CPU Throttling Ratio Top 10",
       "type": "bargauge",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 12,
+        "x": 8,
         "y": 4,
-        "w": 12,
+        "w": 8,
         "h": 8
       },
       "fieldConfig": {
@@ -409,8 +440,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "topk(10, 1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))",
-          "legendFormat": "{{instance}}",
+          "expr": "topk(10, sum by (namespace, pod, container) (rate(container_cpu_cfs_throttled_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\",pod!=\"\",image!=\"\"}[$__rate_interval])) / clamp_min(sum by (namespace, pod, container) (rate(container_cpu_cfs_periods_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\",pod!=\"\",image!=\"\"}[$__rate_interval])), 0.001))",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "range": false,
           "refId": "A",
           "instant": true
@@ -437,7 +468,7 @@
     },
     {
       "id": 7,
-      "title": "Filesystem Usage",
+      "title": "Memory Working Set Top 10",
       "type": "bargauge",
       "datasource": {
         "type": "prometheus",
@@ -445,6 +476,77 @@
       },
       "gridPos": {
         "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.7
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "topk(10, sum by (namespace, pod, container) (container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\",pod!=\"\",image!=\"\"}))",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
+          "range": false,
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "options": {
+        "displayMode": "basic",
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      }
+    },
+    {
+      "id": 8,
+      "title": "Memory Limit Usage Top 10",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
         "y": 12,
         "w": 12,
         "h": 8
@@ -481,8 +583,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "topk(10, 1 - (node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\",mountpoint!~\"/run.*|/var/lib/kubelet/pods.*\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs\",mountpoint!~\"/run.*|/var/lib/kubelet/pods.*\"}))",
-          "legendFormat": "{{instance}} {{mountpoint}}",
+          "expr": "topk(10, sum by (namespace, pod, container) (container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\",pod!=\"\",image!=\"\"}) / clamp_min(sum by (namespace, pod, container) (kube_pod_container_resource_limits{namespace=~\"$namespace\",pod=~\"$pod\",resource=\"memory\",unit=\"byte\",container!=\"\"}), 1))",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "range": false,
           "refId": "A",
           "instant": true
@@ -508,72 +610,8 @@
       }
     },
     {
-      "id": 8,
-      "title": "Node Conditions",
-      "type": "table",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 12,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 3
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "max by (node, condition, status) (kube_node_status_condition{node=~\"$node\",condition=~\"Ready|MemoryPressure|DiskPressure|PIDPressure\",status=~\"true|false\"})",
-          "legendFormat": "{{node}} {{condition}} {{status}}",
-          "range": false,
-          "refId": "A",
-          "instant": true
-        }
-      ],
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true
-      }
-    },
-    {
       "id": 9,
-      "title": "Pods by Node and Namespace",
+      "title": "Restart Detail",
       "type": "table",
       "datasource": {
         "type": "prometheus",
@@ -615,8 +653,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "count by (node, namespace) (kube_pod_info{node=~\"$node\"})",
-          "legendFormat": "{{node}} {{namespace}}",
+          "expr": "sum by (namespace, pod, container) (increase(kube_pod_container_status_restarts_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[30m])) > 0",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "range": false,
           "refId": "A",
           "instant": true
@@ -637,8 +675,8 @@
     },
     {
       "id": 10,
-      "title": "Node Network Receive",
-      "type": "timeseries",
+      "title": "OOMKilled Detail",
+      "type": "table",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -651,7 +689,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "Bps",
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -661,11 +699,11 @@
               },
               {
                 "color": "yellow",
-                "value": 0.7
+                "value": 1
               },
               {
                 "color": "red",
-                "value": 0.9
+                "value": 3
               }
             ]
           }
@@ -679,30 +717,29 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (instance) (rate(node_network_receive_bytes_total{device!~\"lo|veth.*|cali.*|flannel.*|docker.*\"}[$__rate_interval]))",
-          "legendFormat": "{{instance}} rx",
-          "range": true,
-          "refId": "A"
+          "expr": "max by (namespace, pod, container) (kube_pod_container_status_last_terminated_reason{namespace=~\"$namespace\",pod=~\"$pod\",reason=\"OOMKilled\",container!=\"\",pod!=\"\"}) > 0",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
+          "range": false,
+          "refId": "A",
+          "instant": true
         }
       ],
       "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull"
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
           ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
+          "show": false
         },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "showHeader": true
       }
     },
     {
       "id": 11,
-      "title": "Node Network Transmit",
+      "title": "CPU Usage Trend",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -716,7 +753,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "Bps",
+          "unit": "cores",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -744,8 +781,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (instance) (rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|cali.*|flannel.*|docker.*\"}[$__rate_interval]))",
-          "legendFormat": "{{instance}} tx",
+          "expr": "sum by (namespace, pod, container) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\",pod!=\"\",image!=\"\"}[$__rate_interval]))",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "range": true,
           "refId": "A"
         }
@@ -767,7 +804,7 @@
     },
     {
       "id": 12,
-      "title": "Node Pressure Timeline",
+      "title": "Memory Working Set Trend",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -781,7 +818,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "bytes",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -790,8 +827,12 @@
                 "value": null
               },
               {
+                "color": "yellow",
+                "value": 0.7
+              },
+              {
                 "color": "red",
-                "value": 1
+                "value": 0.9
               }
             ]
           }
@@ -805,8 +846,149 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (condition) (kube_node_status_condition{node=~\"$node\",condition=~\"MemoryPressure|DiskPressure|PIDPressure\",status=\"true\"})",
-          "legendFormat": "{{condition}}",
+          "expr": "sum by (namespace, pod, container) (container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\",pod!=\"\",image!=\"\"})",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Pod CPU Pressure Top 10",
+      "type": "bargauge",
+      "description": "CPU PSI from kubelet /metrics/cadvisor, grouped by pod. Uses the pod cgroup series when available and falls back to summed container series.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 4,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.05
+              },
+              {
+                "color": "red",
+                "value": 0.2
+              }
+            ]
+          },
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "topk(10, ((sum by (namespace, pod) (rate(container_pressure_cpu_waiting_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container=\"\",image=\"\",pod!=\"\"}[$__rate_interval]))) or (sum by (namespace, pod) (rate(container_pressure_cpu_waiting_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\",pod!=\"\"}[$__rate_interval])))))",
+          "legendFormat": "{{namespace}}/{{pod}}",
+          "range": false,
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "options": {
+        "displayMode": "basic",
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      }
+    },
+    {
+      "id": 14,
+      "title": "Pod CPU Pressure Trend",
+      "type": "timeseries",
+      "description": "CPU PSI by pod. A non-zero value means at least one task in the pod waited for CPU time.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 24,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.05
+              },
+              {
+                "color": "red",
+                "value": 0.2
+              }
+            ]
+          },
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "((sum by (namespace, pod) (rate(container_pressure_cpu_waiting_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container=\"\",image=\"\",pod!=\"\"}[$__rate_interval]))) or (sum by (namespace, pod) (rate(container_pressure_cpu_waiting_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\",pod!=\"\"}[$__rate_interval]))))",
+          "legendFormat": "{{namespace}}/{{pod}}",
           "range": true,
           "refId": "A"
         }

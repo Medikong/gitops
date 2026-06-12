@@ -164,11 +164,40 @@
     },
     {
       "id": 3,
+      "title": "Tempo Trace by Trace ID - All Services",
+      "type": "traces",
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "query": "$trace_id",
+          "queryType": "traceId",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showMiniMap": true
+      }
+    },
+    {
+      "id": 4,
       "title": "User ID Search",
       "type": "logs",
       "gridPos": {
         "x": 0,
-        "y": 18,
+        "y": 27,
         "w": 24,
         "h": 8
       },
@@ -210,12 +239,12 @@
       }
     },
     {
-      "id": 4,
+      "id": 5,
       "title": "Request ID Search",
       "type": "logs",
       "gridPos": {
         "x": 0,
-        "y": 26,
+        "y": 35,
         "w": 24,
         "h": 8
       },

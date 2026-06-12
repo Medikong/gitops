@@ -8,7 +8,7 @@
 - `manifests/istio-mesh-podmonitors.yaml`: Istio control plane과 주요 ticketing 서비스의 Envoy sidecar metric을 수집한다.
 - `manifests/kong-servicemonitor.yaml`: Kong Gateway metric endpoint를 Prometheus scrape 대상으로 등록한다.
 - `manifests/prometheusrules/*.yaml`: Prometheus Operator가 선택하는 시스템/Kubernetes 알림 후보를 관리한다.
-- `dashboards/*.json`: Grafana sidecar가 읽는 dashboard JSON을 관리한다.
+- `dashboards/{ops,logs,db}/*.json`: Grafana sidecar가 읽는 dashboard JSON을 폴더별로 관리한다.
 - `values/kube-prometheus-stack.yaml`: `prometheus-community/kube-prometheus-stack` values를 관리한다.
 - Grafana datasource는 이 values에서 함께 관리한다. Prometheus는 기본 datasource, Tempo/Loki는 `additionalDataSources`로 선언한다.
 - 서비스별 `ServiceMonitor`는 계속 `charts/medikong-service` release가 관리한다.
@@ -144,13 +144,13 @@ Loki
 
 ## Grafana dashboard
 
-Dashboard는 UI에서 수동 생성하지 않고 `dashboards/*.json` 파일로 관리한다. `kustomization.yaml`의 `configMapGenerator`가 이 파일들을 dashboard ConfigMap으로 만들고, Grafana sidecar는 `grafana_dashboard=1` label을 기준으로 자동 반영한다. ConfigMap은 `kubectl apply` annotation 한도를 피하도록 metrics, logs, DB 묶음으로 나눈다.
+Dashboard는 UI에서 수동 생성하지 않고 `dashboards/{ops,logs,db}/*.json` 파일로 관리한다. `kustomization.yaml`의 `configMapGenerator`가 이 파일들을 dashboard ConfigMap으로 만들고, Grafana sidecar는 `grafana_dashboard=1` label을 기준으로 자동 반영한다. ConfigMap은 `kubectl apply` annotation 한도를 피하도록 Ops, Logs, DB 묶음으로 나누며, `k8s-sidecar-target-directory` annotation으로 Grafana folder도 같은 단위로 분리한다.
 
-첫 화면은 `dashboards/00-service-metrics-overview.json`이다. 패널 순서는 사용자 영향과 핵심 비즈니스 흐름을 먼저 보고, 이후 이벤트와 의존성 상태로 원인을 좁히도록 둔다.
+첫 화면은 Ops folder의 `dashboards/ops/00-service-metrics-overview.json`이다. 패널 순서는 사용자 영향과 핵심 비즈니스 흐름을 먼저 보고, 이후 이벤트와 의존성 상태로 원인을 좁히도록 둔다.
 
-서비스 runtime 상태는 `dashboards/01-service-runtime-health.json`과 `dashboards/02-service-runtime-detail.json`로 나눠 관리한다. `01-service-runtime-health.json`은 전체 서비스 요약과 서비스별 미니 패널에서 현재 Pod 수, available ratio, Ready=false, restart 증가, OOMKilled, memory limit 사용률, CPU throttling을 stat 타일과 bar gauge 리스트로 빠르게 확인한다. `02-service-runtime-detail.json`은 같은 항목을 시간축으로 펼쳐 특정 시간대에 desired/available pod, Ready=false, restart, OOMKilled, CPU/memory/network 상태가 어떻게 움직였는지 확인한다.
+서비스 runtime 상태는 Ops folder의 `dashboards/ops/01-service-runtime-health.json`과 `dashboards/ops/02-service-runtime-detail.json`로 나눠 관리한다. `01-service-runtime-health.json`은 전체 서비스 요약과 서비스별 미니 패널에서 현재 Pod 수, available ratio, Ready=false, restart 증가, OOMKilled, memory limit 사용률, CPU throttling을 stat 타일과 bar gauge 리스트로 빠르게 확인한다. `02-service-runtime-detail.json`은 같은 항목을 시간축으로 펼쳐 특정 시간대에 desired/available pod, Ready=false, restart, OOMKilled, CPU/memory/network 상태가 어떻게 움직였는지 확인한다.
 
-시스템/Kubernetes 메트릭은 `workspace/docs/architecture/observability/metrics/system-metrics.md` 기준으로 `dashboards/10-system-kubernetes-overview.json`, `dashboards/11-pod-container-resources.json`, `dashboards/12-node-pressure-overview.json`에서 관리한다. 진단 흐름은 서비스 영향 확인 후 Deployment 가용성, Pod/Container 자원과 restart/OOMKilled, Node Ready/Pressure 상태 순서로 내려간다. 현재 상태는 stat 타일과 bar gauge로 먼저 보고, 정확한 대상 식별은 table로 확인하며, 시간 변화가 필요한 CPU/memory/network/pressure만 time series로 둔다. Pod CPU pressure는 kubelet/cAdvisor PSI 지표인 `container_pressure_cpu_waiting_seconds_total`의 Pod cgroup series를 우선 사용하고, 없으면 container series를 Pod 단위로 합산해서 본다. PromQL은 `pod=""`, `container="POD"`처럼 운영 판단에 의미 없는 series를 제외한다.
+시스템/Kubernetes 메트릭은 `workspace/docs/architecture/observability/metrics/system-metrics.md` 기준으로 Ops folder의 `dashboards/ops/10-system-kubernetes-overview.json`, `dashboards/ops/11-pod-container-resources.json`, `dashboards/ops/12-node-pressure-overview.json`에서 관리한다. 진단 흐름은 서비스 영향 확인 후 Deployment 가용성, Pod/Container 자원과 restart/OOMKilled, Node Ready/Pressure 상태 순서로 내려간다. 현재 상태는 stat 타일과 bar gauge로 먼저 보고, 정확한 대상 식별은 table로 확인하며, 시간 변화가 필요한 CPU/memory/network/pressure만 time series로 둔다. Pod CPU pressure는 kubelet/cAdvisor PSI 지표인 `container_pressure_cpu_waiting_seconds_total`의 Pod cgroup series를 우선 사용하고, 없으면 container series를 Pod 단위로 합산해서 본다. PromQL은 `pod=""`, `container="POD"`처럼 운영 판단에 의미 없는 series를 제외한다.
 
 시스템/Kubernetes 알림 후보는 `manifests/prometheusrules/system-kubernetes-alerts.yaml`에 둔다. 현재 rule은 Deployment available 부족, Ready=false Pod, restart 증가, OOMKilled, CPU throttling, Node MemoryPressure를 `release: kube-prometheus-stack` selector에 맞춰 Prometheus가 선택하도록 관리한다.
 
@@ -158,7 +158,7 @@ DB 관측성은 `DB 10 -> DB 20 -> DB 30 -> DB 40` 순서로 본다. `DB 10 - Op
 
 DB dashboard는 SQL 원문, 사용자 ID, `request_id`, `trace_id`를 metric label로 올리지 않는 정책을 전제로 한다. Slow query/operation 화면은 SQL 원문 대신 `statement_fingerprint` 또는 `normalized_statement` JSON field를 우선 표시한다. `db.query.slow` 로그와 DB span 속성 보강은 `Medikong/service#19` 범위이므로, 해당 신호가 아직 없는 환경에서는 관련 Loki/Tempo 패널이 비어 있을 수 있다. 앱 DB latency/error metric은 `db_client_operation_duration_seconds_*`, `db_client_operation_errors_total` 수집 이후 채워지며, PostgreSQL/MongoDB exporter metric도 수집기가 배포된 뒤 값이 채워진다.
 
-Loki 로그 확인은 `Logs 10 - Overview`부터 시작한다. Overview는 서비스 5xx, slow request, warning/error, synthetic 실패, Kong 4xx/5xx처럼 큰 이상 신호와 24시간 RED(request/error/duration) 흐름을 먼저 보여주고 원문 로그를 많이 두지 않는다. 서비스/route/status/latency 범위를 넓게 비교할 때는 `Logs 20 - Services and Requests`를 보고, 평상시 trace_id 후보를 찾을 때는 `Logs 25 - Service Log Search`에서 최근 서비스 요청 로그와 trace_id, user_id, request_id를 JSON field로 검색한다. Tempo trace 상세는 대시보드 패널로 직접 조회하지 않고, 로그에서 확인한 trace_id를 Explore의 Tempo 조회로 넘겨 확인한다. 이후 `Logs 30 - Service Errors`에서 서비스별 에러 로그를 나눠 본 뒤, `Logs 40 - Drilldown`에서 `request_id`, `trace_id`, reservation/payment/ticket ID를 JSON field로 검색한다. 특정 서비스 장애를 깊게 볼 때는 `Logs 80 - Service Trace Detail`에서 서비스 하나를 고르고 에러 로그, 요청 흐름, request_id, trace_id, Tempo trace를 한 화면에서 추적한다.
+Loki 로그 확인은 `Logs 10 - Overview`부터 시작한다. Overview는 서비스 5xx, slow request, warning/error, synthetic 실패, Kong 4xx/5xx처럼 큰 이상 신호와 24시간 RED(request/error/duration) 흐름을 먼저 보여주고 원문 로그를 많이 두지 않는다. 서비스/route/status/latency 범위를 넓게 비교할 때는 `Logs 20 - Services and Requests`를 보고, 평상시 trace_id 후보를 찾을 때는 `Logs 25 - Service Log Search`에서 최근 서비스 요청 로그와 trace_id, user_id, request_id를 JSON field로 검색한 뒤 같은 화면에서 Tempo trace를 바로 확인한다. 이후 `Logs 30 - Service Errors`에서 서비스별 에러 로그를 나눠 본 뒤, `Logs 40 - Drilldown`에서 `request_id`, `trace_id`, reservation/payment/ticket ID를 JSON field로 검색한다. 특정 서비스 장애를 깊게 볼 때는 `Logs 80 - Service Trace Detail`에서 서비스 하나를 고르고 에러 로그, 요청 흐름, request_id, trace_id, Tempo trace를 한 화면에서 추적한다.
 
 로그 전용 dashboard는 아래 레이어로 나눈다.
 
