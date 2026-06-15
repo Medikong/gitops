@@ -19,6 +19,8 @@ GET /performances/{id}/seats
 `setup-read-dataset`은 부하테스트용 fake read dataset을 준비한다.
 이 시나리오는 provider/admin write API를 사용하므로 read baseline 결과와 섞지 않는다.
 생성 대상은 `dataset.profile`, `dataset.revision`, 수량 값으로 조절한다.
+`flows/dataset.js`는 profile registry만 담당하고, 실제 데이터셋 구성은 `flows/datasets/<profile>.js`가 소유한다.
+새 케이스가 필요하면 profile 파일을 추가하고 registry에 등록한다.
 
 ```text
 provider/admin login

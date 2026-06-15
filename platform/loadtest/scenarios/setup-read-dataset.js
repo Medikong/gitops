@@ -3,7 +3,7 @@ import { group, fail } from 'k6';
 import { loginAdmin, loginProvider } from '../lib/auth.js';
 import { getConfig, requireDatasetCredentials } from '../lib/config.js';
 import { logDatasetFinished, logRunFailed, logRunStarted } from '../lib/log.js';
-import { setupReadDataset } from '../flows/dataset.js';
+import { setupDatasetProfile } from '../flows/dataset.js';
 
 const config = getConfig();
 
@@ -46,7 +46,7 @@ export default function setupDataset() {
     });
     const state = {};
     group('dataset.setup', () => {
-      Object.assign(state, setupReadDataset(config, tokens));
+      Object.assign(state, setupDatasetProfile(config, tokens));
     });
     logDatasetFinished(config, state);
   } catch (error) {
