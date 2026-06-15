@@ -25,6 +25,12 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: kube-system
+  ignoreDifferences:
+    - group: storage.k8s.io
+      kind: CSIDriver
+      name: ebs.csi.aws.com
+      jsonPointers:
+        - /spec/nodeAllocatableUpdatePeriodSeconds
   syncPolicy:
     automated:
       prune: true
