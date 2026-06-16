@@ -18,6 +18,8 @@ spec:
             defaultReplicaCount: 1
             createDefaultDiskLabeledNodes: true
             defaultDataPath: /var/lib/longhorn
+          preUpgradeChecker:
+            jobEnabled: false
           persistence:
             defaultClass: false
             defaultClassReplicaCount: 1
