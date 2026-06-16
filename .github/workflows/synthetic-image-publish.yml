@@ -26,10 +26,10 @@ on:
         type: string
         default: ""
       platforms:
-        description: "빌드할 플랫폼 목록. aws-dev 기본값은 linux/arm64"
+        description: "빌드할 플랫폼 목록. 기본값은 linux/arm64,linux/amd64"
         required: true
         type: string
-        default: linux/arm64
+        default: linux/arm64,linux/amd64
       create_repository:
         description: ECR repository가 없으면 생성
         required: true
@@ -60,6 +60,7 @@ env:
   IMAGE_REPOSITORY: synthetic-traffic
   VALUES_FILE: platform/synthetic/values/aws-dev.yaml
   DEFAULT_AWS_ROLE_ARN: arn:aws:iam::941141115079:role/github-actions-ecr-role
+  DEFAULT_PLATFORMS: linux/arm64,linux/amd64
 
 jobs:
   disabled:
@@ -101,7 +102,37 @@ jobs:
             exit 2
           fi
 
-          platforms="${INPUT_PLATFORMS:-linux/arm64}"
+          normalize_platforms() {
+            local raw_platforms="$1"
+            local normalized=""
+            local platform
+
+            IFS=',' read -r -a platform_items <<<"${raw_platforms}"
+            for platform in "${platform_items[@]}"; do
+              platform="$(printf '%s' "${platform}" | xargs)"
+              if [ -z "${platform}" ]; then
+                continue
+              fi
+              case "${platform}" in
+                linux/arm64|linux/amd64) ;;
+                *)
+                  printf '지원하지 않는 platform입니다: %s\n' "${platform}" >&2
+                  printf '%s\n' '예상 값: linux/arm64 또는 linux/amd64' >&2
+                  exit 2
+                  ;;
+              esac
+              normalized="${normalized}${normalized:+,}${platform}"
+            done
+
+            if [ -z "${normalized}" ]; then
+              printf '%s\n' 'platforms 입력값이 비어 있습니다.' >&2
+              exit 2
+            fi
+
+            printf '%s\n' "${normalized}"
+          }
+
+          platforms="$(normalize_platforms "${INPUT_PLATFORMS:-${DEFAULT_PLATFORMS}}")"
           if [ -z "${platforms}" ]; then
             printf '%s\n' 'platforms 입력값이 비어 있습니다.' >&2
             exit 2
@@ -143,6 +174,11 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ steps.config.outputs.role_arn }}
           role-session-name: medikong-synthetic-image-${{ github.run_id }}
+
+      - name: Docker QEMU 설정
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64,amd64
 
       - name: Docker Buildx 설정
         uses: docker/setup-buildx-action@v3
