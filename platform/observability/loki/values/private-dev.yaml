@@ -5,13 +5,13 @@ imageMirror:
       source: docker.io/grafana/loki:3.6.7
       targetRegistry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
       targetRepository: grafana/loki
-      tag: 3.6.7
+      tag: 3.6.7-amd64
     - name: loki-sidecar
       description: Loki chart rules sidecar image
       source: docker.io/kiwigrid/k8s-sidecar:2.5.0
       targetRegistry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
       targetRepository: kiwigrid/k8s-sidecar
-      tag: 2.5.0
+      tag: 2.5.0-amd64
 
 deploymentMode: SingleBinary
 
@@ -29,7 +29,7 @@ loki:
   image:
     registry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
     repository: grafana/loki
-    tag: 3.6.7
+    tag: 3.6.7-amd64
   commonConfig:
     replication_factor: 1
   limits_config:
@@ -86,7 +86,7 @@ sidecar:
   image:
     registry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
     repository: kiwigrid/k8s-sidecar
-    tag: 2.5.0
+    tag: 2.5.0-amd64
 
 read:
   replicas: 0

@@ -5,14 +5,14 @@ imageMirror:
       source: docker.io/grafana/tempo:2.9.0
       targetRegistry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
       targetRepository: grafana/tempo
-      tag: 2.9.0
+      tag: 2.9.0-amd64
 
 replicas: 1
 
 tempo:
   registry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
   repository: grafana/tempo
-  tag: 2.9.0
+  tag: 2.9.0-amd64
   pullSecrets:
     - ecr-registry
   retention: 72h
