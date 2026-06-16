@@ -53,3 +53,10 @@ metadata:
   name: ticketing-messaging
   labels:
     app.kubernetes.io/part-of: medikong
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: synthetic
+  labels:
+    app.kubernetes.io/part-of: medikong

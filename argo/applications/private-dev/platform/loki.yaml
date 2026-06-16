@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki-private-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-18"
+spec:
+  project: default
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: loki
+      targetRevision: 6.55.0
+      helm:
+        releaseName: loki
+        valueFiles:
+          - $values/platform/observability/loki/values/private-dev.yaml
+    - repoURL: https://github.com/Medikong/gitops.git
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    managedNamespaceMetadata:
+      labels:
+        app.kubernetes.io/name: observability
+        app.kubernetes.io/part-of: medikong
+        medikong.io/platform: observability
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

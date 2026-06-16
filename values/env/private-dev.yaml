@@ -1,0 +1,47 @@
+environment: private-dev
+
+image:
+  registry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: ecr-registry
+
+deployment:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+
+container:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+observability:
+  tracing:
+    enabled: true
+    otlpEndpoint: http://opentelemetry-collector.observability.svc.cluster.local:4317
+    excludedUrls: /health,/healthz,/readyz,/metrics
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+
+serviceMonitor:
+  enabled: true
+  networkPolicy:
+    extraPorts:
+      - 15090

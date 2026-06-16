@@ -1,0 +1,44 @@
+imageMirror:
+  images:
+    - name: tempo
+      description: Tempo trace backend
+      source: docker.io/grafana/tempo:2.9.0
+      targetRegistry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
+      targetRepository: grafana/tempo
+      tag: 2.9.0
+
+replicas: 1
+
+tempo:
+  registry: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com
+  repository: grafana/tempo
+  tag: 2.9.0
+  pullSecrets:
+    - ecr-registry
+  retention: 72h
+  memBallastSizeMbs: 64
+  reportingEnabled: false
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+      wal:
+        path: /var/tempo/wal
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+persistence:
+  enabled: true
+  storageClassName: medikong-longhorn
+  size: 10Gi
+
+nodeSelector: {}
+
+serviceMonitor:
+  enabled: false

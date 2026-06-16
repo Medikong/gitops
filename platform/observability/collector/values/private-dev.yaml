@@ -1,0 +1,338 @@
+mode: daemonset
+fullnameOverride: opentelemetry-collector
+
+image:
+  repository: 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com/otel/opentelemetry-collector-contrib
+  tag: 0.153.0
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ecr-registry
+
+command:
+  name: otelcol-contrib
+
+serviceAccount:
+  create: true
+  automountServiceAccountToken: true
+
+clusterRole:
+  create: true
+  rules:
+    - apiGroups:
+        - ""
+      resources:
+        - namespaces
+        - pods
+      verbs:
+        - get
+        - list
+        - watch
+    - apiGroups:
+        - apps
+      resources:
+        - replicasets
+      verbs:
+        - get
+        - list
+        - watch
+
+replicaCount: 1
+
+service:
+  enabled: true
+
+rollout:
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+ports:
+  otlp:
+    enabled: true
+    containerPort: 4317
+    servicePort: 4317
+    hostPort: null
+    protocol: TCP
+    appProtocol: grpc
+  otlp-http:
+    enabled: true
+    containerPort: 4318
+    servicePort: 4318
+    hostPort: null
+    protocol: TCP
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+  metrics:
+    enabled: true
+    containerPort: 8888
+    servicePort: 8888
+    protocol: TCP
+
+alternateConfig:
+  receivers:
+    filelog:
+      include:
+        - /var/log/pods/*/*/*.log
+      exclude:
+        - /var/log/pods/observability_opentelemetry-collector*_*/opentelemetry-collector/*.log
+      include_file_name: false
+      include_file_path: true
+      start_at: end
+      retry_on_failure:
+        enabled: true
+      operators:
+        - id: container-parser
+          type: container
+          max_log_size: 102400
+        - id: json-body-parser
+          type: json_parser
+          parse_from: body
+          parse_to: attributes
+          if: body matches "^\\{"
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  processors:
+    k8sattributes:
+      auth_type: serviceAccount
+      passthrough: false
+      extract:
+        metadata:
+          - k8s.namespace.name
+          - k8s.pod.name
+          - k8s.container.name
+          - k8s.deployment.name
+          - k8s.job.name
+          - k8s.cronjob.name
+        labels:
+          - tag_name: app
+            key: app.kubernetes.io/name
+            from: pod
+          - tag_name: environment
+            key: medikong.io/environment
+            from: pod
+      pod_association:
+        - sources:
+            - from: resource_attribute
+              name: k8s.pod.ip
+        - sources:
+            - from: resource_attribute
+              name: k8s.pod.name
+            - from: resource_attribute
+              name: k8s.namespace.name
+    transform/log_labels:
+      error_mode: ignore
+      log_statements:
+        - context: log
+          statements:
+            - set(resource.attributes["scenario"], attributes["scenario"]) where attributes["scenario"] != nil
+            - set(resource.attributes["step"], attributes["step"]) where attributes["step"] != nil
+            - set(resource.attributes["service.name"], resource.attributes["app"]) where resource.attributes["app"] != nil
+            - set(resource.attributes["deployment.environment.name"], resource.attributes["environment"]) where resource.attributes["environment"] != nil
+    memory_limiter:
+      check_interval: 1s
+      limit_percentage: 75
+      spike_limit_percentage: 20
+    filter/drop_low_value_access:
+      error_mode: ignore
+      logs:
+        log_record:
+          - attributes["event"] == "http.request.completed" and attributes["log.policy"] == "drop"
+          - attributes["event"] == "http.request.completed" and attributes["log.policy"] == "sample"
+    filter/access_sample_candidates:
+      error_mode: ignore
+      logs:
+        log_record:
+          - attributes["event"] != "http.request.completed"
+          - attributes["log.policy"] != "sample"
+    probabilistic_sampler/access_success:
+      sampling_percentage: 10
+      hash_seed: 32
+      fail_closed: false
+      attribute_source: record
+      from_attribute: request_id
+    batch:
+      timeout: 5s
+      send_batch_size: 8192
+  exporters:
+    otlphttp/loki:
+      endpoint: http://loki.observability.svc.cluster.local:3100/otlp
+    otlp/tempo:
+      endpoint: tempo.observability.svc.cluster.local:4317
+      tls:
+        insecure: true
+  extensions:
+    health_check:
+      endpoint: 0.0.0.0:13133
+  service:
+    extensions:
+      - health_check
+    telemetry:
+      metrics:
+        readers:
+          - pull:
+              exporter:
+                prometheus:
+                  host: 0.0.0.0
+                  port: 8888
+    pipelines:
+      traces:
+        receivers:
+          - otlp
+        processors:
+          - k8sattributes
+          - memory_limiter
+          - batch
+        exporters:
+          - otlp/tempo
+      logs/keep:
+        receivers:
+          - filelog
+        processors:
+          - k8sattributes
+          - transform/log_labels
+          - memory_limiter
+          - filter/drop_low_value_access
+          - batch
+        exporters:
+          - otlphttp/loki
+      logs/sampled-access:
+        receivers:
+          - filelog
+        processors:
+          - k8sattributes
+          - transform/log_labels
+          - memory_limiter
+          - filter/access_sample_candidates
+          - probabilistic_sampler/access_success
+          - batch
+        exporters:
+          - otlphttp/loki
+
+serviceMonitor:
+  enabled: true
+  metricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+  extraLabels:
+    release: kube-prometheus-stack
+
+podSecurityContext:
+  runAsNonRoot: false
+  runAsUser: 0
+  runAsGroup: 0
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsUser: 0
+  capabilities:
+    drop:
+      - ALL
+
+extraVolumes:
+  - name: varlogpods
+    hostPath:
+      path: /var/log/pods
+  - name: varlogcontainers
+    hostPath:
+      path: /var/log/containers
+
+extraVolumeMounts:
+  - name: varlogpods
+    mountPath: /var/log/pods
+    readOnly: true
+  - name: varlogcontainers
+    mountPath: /var/log/containers
+    readOnly: true
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 512Mi
+
+nodeSelector: {}
+
+podLabels:
+  app.kubernetes.io/part-of: medikong
+  app.kubernetes.io/component: trace-log-collector
+
+extraManifests:
+  - apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: opentelemetry-collector-trace-pipeline
+      namespace: observability
+      labels:
+        app.kubernetes.io/name: opentelemetry-collector
+        app.kubernetes.io/part-of: medikong
+        app.kubernetes.io/component: trace-log-collector
+    spec:
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: opentelemetry-collector
+      policyTypes:
+        - Ingress
+        - Egress
+      ingress:
+        - from:
+            - namespaceSelector:
+                matchLabels:
+                  app.kubernetes.io/part-of: medikong
+              podSelector:
+                matchLabels:
+                  ticketing.io/tier: api
+          ports:
+            - protocol: TCP
+              port: 4317
+            - protocol: TCP
+              port: 4318
+        - from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: monitoring
+          ports:
+            - protocol: TCP
+              port: 8888
+      egress:
+        - to:
+            - podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: tempo
+                  app.kubernetes.io/instance: tempo
+          ports:
+            - protocol: TCP
+              port: 4317
+        - to:
+            - podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: loki
+                  app.kubernetes.io/instance: loki
+          ports:
+            - protocol: TCP
+              port: 3100
+        - to:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: kube-system
+          ports:
+            - protocol: UDP
+              port: 53
+            - protocol: TCP
+              port: 53

@@ -1,0 +1,60 @@
+env:
+  database: "off"
+
+replicaCount: 1
+
+deployment:
+  daemonset: false
+
+admin:
+  enabled: false
+
+manager:
+  enabled: false
+
+portal:
+  enabled: false
+
+portalapi:
+  enabled: false
+
+proxy:
+  type: ClusterIP
+  http:
+    enabled: true
+    servicePort: 80
+    containerPort: 8000
+    hostPort: 80
+  tls:
+    enabled: true
+    servicePort: 443
+    containerPort: 8443
+    hostPort: 443
+
+ingressController:
+  enabled: true
+  ingressClass: kong
+  createIngressClass: true
+  resources:
+    requests:
+      cpu: 5m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+nodeSelector:
+  medikong.io/ingress-node: "true"
+
+tolerations: []
+
+resources:
+  requests:
+    cpu: 5m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 768Mi
+
+postgresql:
+  enabled: false

@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: payment-private-dev
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/Medikong/gitops.git
+      targetRevision: HEAD
+      path: charts/medikong-service
+      helm:
+        releaseName: payment-private-dev
+        valueFiles:
+          - $values/values/base.yaml
+          - $values/values/env/private-dev.yaml
+          - $values/values/services/payment.yaml
+          - $values/values/overrides/private-dev-smoke-stable.yaml
+    - repoURL: https://github.com/Medikong/gitops.git
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ticketing-payment
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

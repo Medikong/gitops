@@ -1,0 +1,185 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgadmin-private-dev-servers
+  namespace: ticketing-payment
+  labels:
+    app.kubernetes.io/part-of: medikong
+    app.kubernetes.io/name: pgadmin
+data:
+  servers.json: |
+    {
+      "Servers": {
+        "1": {
+          "Name": "auth-db",
+          "Group": "Medikong Private Dev",
+          "Host": "auth-db.ticketing-auth.svc.cluster.local",
+          "Port": 5432,
+          "MaintenanceDB": "auth_db",
+          "Username": "user",
+          "SSLMode": "prefer"
+        },
+        "2": {
+          "Name": "concert-db",
+          "Group": "Medikong Private Dev",
+          "Host": "concert-db.ticketing-concert.svc.cluster.local",
+          "Port": 5432,
+          "MaintenanceDB": "concert_db",
+          "Username": "user",
+          "SSLMode": "prefer"
+        },
+        "3": {
+          "Name": "reservation-db",
+          "Group": "Medikong Private Dev",
+          "Host": "reservation-db.ticketing-reservation.svc.cluster.local",
+          "Port": 5432,
+          "MaintenanceDB": "reservation_db",
+          "Username": "user",
+          "SSLMode": "prefer"
+        },
+        "4": {
+          "Name": "payment-db",
+          "Group": "Medikong Private Dev",
+          "Host": "payment-db.ticketing-payment.svc.cluster.local",
+          "Port": 5432,
+          "MaintenanceDB": "payment_db",
+          "Username": "user",
+          "SSLMode": "prefer"
+        },
+        "5": {
+          "Name": "ticket-db",
+          "Group": "Medikong Private Dev",
+          "Host": "ticket-db.ticketing-ticket.svc.cluster.local",
+          "Port": 5432,
+          "MaintenanceDB": "ticket_db",
+          "Username": "user",
+          "SSLMode": "prefer"
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgadmin
+  namespace: ticketing-payment
+  labels:
+    app.kubernetes.io/part-of: medikong
+    app.kubernetes.io/name: pgadmin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pgadmin
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: medikong
+        app.kubernetes.io/name: pgadmin
+    spec:
+      containers:
+        - name: pgadmin
+          image: dpage/pgadmin4:8.14
+          ports:
+            - name: http
+              containerPort: 80
+          env:
+            - name: SCRIPT_NAME
+              value: /pgadmin
+            - name: PGADMIN_LISTEN_PORT
+              value: "80"
+            - name: PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED
+              value: "False"
+            - name: PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION
+              value: "False"
+            - name: PGADMIN_DEFAULT_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: pgadmin-private-dev-credentials
+                  key: email
+            - name: PGADMIN_DEFAULT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pgadmin-private-dev-credentials
+                  key: password
+          readinessProbe:
+            httpGet:
+              path: /pgadmin/misc/ping
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: servers
+              mountPath: /pgadmin4/servers.json
+              subPath: servers.json
+            - name: data
+              mountPath: /var/lib/pgadmin
+      volumes:
+        - name: servers
+          configMap:
+            name: pgadmin-private-dev-servers
+        - name: data
+          persistentVolumeClaim:
+            claimName: pgadmin-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pgadmin-data
+  namespace: ticketing-payment
+  labels:
+    app.kubernetes.io/part-of: medikong
+    app.kubernetes.io/name: pgadmin
+spec:
+  storageClassName: medikong-longhorn
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgadmin
+  namespace: ticketing-payment
+  labels:
+    app.kubernetes.io/part-of: medikong
+    app.kubernetes.io/name: pgadmin
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: pgadmin
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pgadmin
+  namespace: ticketing-payment
+  labels:
+    app.kubernetes.io/part-of: medikong
+    app.kubernetes.io/name: pgadmin
+  annotations:
+    konghq.com/protocols: http
+spec:
+  ingressClassName: kong
+  rules:
+    - http:
+        paths:
+          - path: /pgadmin
+            pathType: Prefix
+            backend:
+              service:
+                name: pgadmin
+                port:
+                  number: 80
