@@ -1,6 +1,7 @@
 import { fail } from 'k6';
 
 import { setupReadApiBasicDataset } from './datasets/read-api-basic.js';
+import { setupReservationJourneyDataset } from './datasets/reservation-journey.js';
 
 // 데이터셋 준비는 의도적으로 profile 기반으로 둔다. 조회 부하테스트는 시간이
 // 지나면서 넓은 공연 목록, 큰 좌석 맵, 많은 공연 회차, 매진에 가까운 재고,
@@ -12,6 +13,7 @@ import { setupReadApiBasicDataset } from './datasets/read-api-basic.js';
 //   datasetProfiles['large-seat-map'] = setupLargeSeatMapDataset;
 const datasetProfiles = {
   'read-api-basic': setupReadApiBasicDataset,
+  'reservation-journey': setupReservationJourneyDataset,
 };
 
 export function supportedDatasetProfiles() {

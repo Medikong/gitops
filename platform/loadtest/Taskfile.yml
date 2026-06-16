@@ -12,6 +12,9 @@ vars:
   IMAGE_TAG: '{{default "dev" .DEV_IMAGE_TAG}}'
   VALUES_FILE: '{{default "values/local.yaml" .LOADTEST_VALUES_FILE}}'
   CREDENTIALS_SECRET: '{{default "read-api-loadtest-credentials" .LOADTEST_CREDENTIALS_SECRET}}'
+  KONG_RATE_LIMIT_PLUGINS: '{{default "ticketing-rate-limit-concerts ticketing-rate-limit-reservations ticketing-rate-limit-payments ticketing-rate-limit-tickets ticketing-rate-limit-notifications" .LOADTEST_KONG_RATE_LIMIT_PLUGINS}}'
+  KONG_RATE_LIMIT_DEFAULT_MINUTE: '{{default "120" .LOADTEST_KONG_RATE_LIMIT_DEFAULT_MINUTE}}'
+  KONG_RATE_LIMIT_DISABLED_MINUTE: '{{default "1000000" .LOADTEST_KONG_RATE_LIMIT_DISABLED_MINUTE}}'
 
 tasks:
   default:
@@ -30,13 +33,18 @@ tasks:
       - |
         set -eu
         values_file="${LOADTEST_VALUES_FILE:-{{.VALUES_FILE}}}"
+        scenario_values_file="${LOADTEST_SCENARIO_VALUES_FILE:-}"
         image_ref="$(task image-ref --silent)"
         image_registry="${image_ref%/*}"
         image_name_tag="${image_ref##*/}"
         image_repository="${image_name_tag%:*}"
         image_tag="${image_name_tag##*:}"
+        values_args="-f ${values_file}"
+        if [ -n "${scenario_values_file}" ]; then
+          values_args="${values_args} -f ${scenario_values_file}"
+        fi
         {{.HELM}} template {{.RELEASE}} . \
-          -f "${values_file}" \
+          ${values_args} \
           --namespace {{.NAMESPACE}} \
           --set-string image.registry="${image_registry}" \
           --set-string image.repository="${image_repository}" \
@@ -99,18 +107,89 @@ tasks:
       - |
         set -eu
         values_file="${LOADTEST_VALUES_FILE:-{{.VALUES_FILE}}}"
+        scenario_values_file="${LOADTEST_SCENARIO_VALUES_FILE:-}"
         image_ref="$(task image-ref --silent)"
         image_registry="${image_ref%/*}"
         image_name_tag="${image_ref##*/}"
         image_repository="${image_name_tag%:*}"
         image_tag="${image_name_tag##*:}"
+        values_args="-f ${values_file}"
+        if [ -n "${scenario_values_file}" ]; then
+          values_args="${values_args} -f ${scenario_values_file}"
+        fi
         {{.HELM}} upgrade --install {{.RELEASE}} . \
           --namespace {{.NAMESPACE}} \
           --create-namespace \
-          -f "${values_file}" \
+          ${values_args} \
           --set-string image.registry="${image_registry}" \
           --set-string image.repository="${image_repository}" \
           --set-string image.tag="${image_tag}"
+
+  run-local:
+    desc: 로컬 dev에 특정 시나리오를 배포하고 dataset setup과 loadtest를 바로 실행합니다. SCENARIO=<scenario-name>
+    cmds:
+      - |
+        set -eu
+        scenario="${SCENARIO:-${LOADTEST_SCENARIO:-read-api-baseline}}"
+        scenario_values_file="${LOADTEST_SCENARIO_VALUES_FILE:-values/scenarios/${scenario}.yaml}"
+        if [ ! -f "${scenario_values_file}" ]; then
+          printf 'Unknown or missing scenario values file: %s\n' "${scenario_values_file}" >&2
+          printf 'Set SCENARIO=<name> or LOADTEST_SCENARIO_VALUES_FILE=<path>.\n' >&2
+          exit 2
+        fi
+        export SCENARIO="${scenario}"
+        export LOADTEST_SCENARIO_VALUES_FILE="${scenario_values_file}"
+        disable_kong_rate_limit="${LOADTEST_DISABLE_KONG_RATE_LIMIT:-}"
+        if [ -z "${disable_kong_rate_limit}" ] && [ "${scenario}" = "reservation-journey-load-test" ]; then
+          disable_kong_rate_limit="true"
+        fi
+        disable_kong_rate_limit="${disable_kong_rate_limit:-false}"
+        printf 'Running loadtest scenario=%s values=%s disable_kong_rate_limit=%s\n' \
+          "${scenario}" "${LOADTEST_SCENARIO_VALUES_FILE}" "${disable_kong_rate_limit}"
+        if [ "${disable_kong_rate_limit}" = "true" ]; then
+          task kong-rate-limit:disable
+          trap 'task kong-rate-limit:restore' EXIT
+        fi
+        task secret-local
+        task deploy
+        task setup-dataset
+        task run
+
+  kong-rate-limit:disable:
+    desc: 로컬 loadtest 동안 Kong rate limit 한도를 크게 올립니다. LOADTEST_KONG_RATE_LIMIT_DISABLED_MINUTE=<minute>
+    cmds:
+      - |
+        set -eu
+        minute="{{.KONG_RATE_LIMIT_DISABLED_MINUTE}}"
+        for plugin in {{.KONG_RATE_LIMIT_PLUGINS}}; do
+          printf 'Raising Kong rate limit plugin=%s minute=%s\n' "${plugin}" "${minute}"
+          {{.KUBECTL}} patch kongclusterplugin "${plugin}" \
+            --type=merge \
+            -p "{\"config\":{\"minute\":${minute},\"policy\":\"local\"}}"
+        done
+
+  kong-rate-limit:restore:
+    desc: Kong rate limit 한도를 기본값으로 되돌립니다. LOADTEST_KONG_RATE_LIMIT_DEFAULT_MINUTE=<minute>
+    cmds:
+      - |
+        set -eu
+        minute="{{.KONG_RATE_LIMIT_DEFAULT_MINUTE}}"
+        for plugin in {{.KONG_RATE_LIMIT_PLUGINS}}; do
+          printf 'Restoring Kong rate limit plugin=%s minute=%s\n' "${plugin}" "${minute}"
+          {{.KUBECTL}} patch kongclusterplugin "${plugin}" \
+            --type=merge \
+            -p "{\"config\":{\"minute\":${minute},\"policy\":\"local\"}}"
+        done
+
+  kong-rate-limit:status:
+    desc: loadtest에 영향을 주는 Kong rate limit plugin 상태를 봅니다.
+    cmds:
+      - |
+        set -eu
+        for plugin in {{.KONG_RATE_LIMIT_PLUGINS}}; do
+          {{.KUBECTL}} get kongclusterplugin "${plugin}" \
+            -o jsonpath='{.metadata.name}{" minute="}{.config.minute}{" policy="}{.config.policy}{"\n"}'
+        done
 
   setup-dataset:
     desc: 배포된 dataset CronJob template에서 로컬 수동 Job을 1회 생성하고 로그를 출력합니다.
@@ -119,20 +198,48 @@ tasks:
         set -eu
         job_name="{{.RELEASE}}-dataset-manual-$(date -u +%Y%m%d%H%M%S)"
         {{.KUBECTL}} -n {{.NAMESPACE}} create job "${job_name}" --from="cronjob/{{.RELEASE}}-dataset"
+        pod_name=""
+        for _ in $(seq 1 60); do
+          pod_name="$({{.KUBECTL}} -n {{.NAMESPACE}} get pod -l job-name="${job_name}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+          if [ -n "${pod_name}" ]; then
+            break
+          fi
+          sleep 1
+        done
+        logs_pid=""
+        if [ -n "${pod_name}" ]; then
+          container_id=""
+          phase=""
+          for _ in $(seq 1 60); do
+            container_id="$({{.KUBECTL}} -n {{.NAMESPACE}} get pod "${pod_name}" -o jsonpath='{.status.containerStatuses[?(@.name=="runner")].containerID}' 2>/dev/null || true)"
+            phase="$({{.KUBECTL}} -n {{.NAMESPACE}} get pod "${pod_name}" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+            if [ -n "${container_id}" ] || [ "${phase}" = "Succeeded" ] || [ "${phase}" = "Failed" ]; then
+              break
+            fi
+            sleep 1
+          done
+          if [ -n "${container_id}" ] || [ "${phase}" = "Succeeded" ] || [ "${phase}" = "Failed" ]; then
+            {{.KUBECTL}} -n {{.NAMESPACE}} logs -f "pod/${pod_name}" --tail=20 &
+            logs_pid="$!"
+            trap 'if [ -n "${logs_pid:-}" ]; then kill "${logs_pid}" 2>/dev/null || true; fi' EXIT
+          fi
+        fi
         deadline=$(( $(date +%s) + 1800 ))
         while true; do
           complete="$({{.KUBECTL}} -n {{.NAMESPACE}} get job "${job_name}" -o jsonpath='{.status.succeeded}' 2>/dev/null || true)"
           failed="$({{.KUBECTL}} -n {{.NAMESPACE}} get job "${job_name}" -o jsonpath='{.status.failed}' 2>/dev/null || true)"
           if [ "${failed:-0}" -ge 1 ]; then
-            {{.KUBECTL}} -n {{.NAMESPACE}} logs "job/${job_name}" --tail=300 || true
+            if [ -n "${logs_pid}" ]; then kill "${logs_pid}" 2>/dev/null || true; fi
+            {{.KUBECTL}} -n {{.NAMESPACE}} logs "job/${job_name}" --tail=120 || true
             exit 1
           fi
           if [ "${complete:-0}" -ge 1 ]; then
-            {{.KUBECTL}} -n {{.NAMESPACE}} logs "job/${job_name}" --tail=300
+            if [ -n "${logs_pid}" ]; then kill "${logs_pid}" 2>/dev/null || true; fi
             exit 0
           fi
           if [ "$(date +%s)" -ge "${deadline}" ]; then
-            {{.KUBECTL}} -n {{.NAMESPACE}} logs "job/${job_name}" --tail=300 || true
+            if [ -n "${logs_pid}" ]; then kill "${logs_pid}" 2>/dev/null || true; fi
+            {{.KUBECTL}} -n {{.NAMESPACE}} logs "job/${job_name}" --tail=120 || true
             printf 'Timed out waiting for job/%s.\n' "${job_name}" >&2
             exit 1
           fi
@@ -144,22 +251,57 @@ tasks:
     cmds:
       - |
         set -eu
-        job_name="{{.RELEASE}}-manual-$(date -u +%Y%m%d%H%M%S)"
+        scenario="${SCENARIO:-$({{.KUBECTL}} -n {{.NAMESPACE}} get cronjob {{.RELEASE}} -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].env[?(@.name=="LOADTEST_SCENARIO")].value}' 2>/dev/null || true)}"
+        scenario="${scenario:-loadtest}"
+        scenario_slug="$(printf '%s' "${scenario}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-' '-' | sed 's/--*/-/g; s/^-//; s/-$//' | cut -c1-22)"
+        scenario_slug="${scenario_slug:-loadtest}"
+        timestamp="$(date -u +%Y%m%d%H%M%S)"
+        job_base="$(printf '%s-%s-manual' '{{.RELEASE}}' "${scenario_slug}" | cut -c1-48 | sed 's/-$//')"
+        job_name="${job_base}-${timestamp}"
+        printf 'Creating loadtest Job scenario=%s job=%s\n' "${scenario}" "${job_name}"
         {{.KUBECTL}} -n {{.NAMESPACE}} create job "${job_name}" --from="cronjob/{{.RELEASE}}"
+        pod_name=""
+        for _ in $(seq 1 60); do
+          pod_name="$({{.KUBECTL}} -n {{.NAMESPACE}} get pod -l job-name="${job_name}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+          if [ -n "${pod_name}" ]; then
+            break
+          fi
+          sleep 1
+        done
+        logs_pid=""
+        if [ -n "${pod_name}" ]; then
+          container_id=""
+          phase=""
+          for _ in $(seq 1 60); do
+            container_id="$({{.KUBECTL}} -n {{.NAMESPACE}} get pod "${pod_name}" -o jsonpath='{.status.containerStatuses[?(@.name=="runner")].containerID}' 2>/dev/null || true)"
+            phase="$({{.KUBECTL}} -n {{.NAMESPACE}} get pod "${pod_name}" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+            if [ -n "${container_id}" ] || [ "${phase}" = "Succeeded" ] || [ "${phase}" = "Failed" ]; then
+              break
+            fi
+            sleep 1
+          done
+          if [ -n "${container_id}" ] || [ "${phase}" = "Succeeded" ] || [ "${phase}" = "Failed" ]; then
+            {{.KUBECTL}} -n {{.NAMESPACE}} logs -f "pod/${pod_name}" --tail=20 &
+            logs_pid="$!"
+            trap 'if [ -n "${logs_pid:-}" ]; then kill "${logs_pid}" 2>/dev/null || true; fi' EXIT
+          fi
+        fi
         deadline=$(( $(date +%s) + 1200 ))
         while true; do
           complete="$({{.KUBECTL}} -n {{.NAMESPACE}} get job "${job_name}" -o jsonpath='{.status.succeeded}' 2>/dev/null || true)"
           failed="$({{.KUBECTL}} -n {{.NAMESPACE}} get job "${job_name}" -o jsonpath='{.status.failed}' 2>/dev/null || true)"
           if [ "${failed:-0}" -ge 1 ]; then
-            {{.KUBECTL}} -n {{.NAMESPACE}} logs "job/${job_name}" --tail=300 || true
+            if [ -n "${logs_pid}" ]; then kill "${logs_pid}" 2>/dev/null || true; fi
+            {{.KUBECTL}} -n {{.NAMESPACE}} logs "job/${job_name}" --tail=120 || true
             exit 1
           fi
           if [ "${complete:-0}" -ge 1 ]; then
-            {{.KUBECTL}} -n {{.NAMESPACE}} logs "job/${job_name}" --tail=300
+            if [ -n "${logs_pid}" ]; then kill "${logs_pid}" 2>/dev/null || true; fi
             exit 0
           fi
           if [ "$(date +%s)" -ge "${deadline}" ]; then
-            {{.KUBECTL}} -n {{.NAMESPACE}} logs "job/${job_name}" --tail=300 || true
+            if [ -n "${logs_pid}" ]; then kill "${logs_pid}" 2>/dev/null || true; fi
+            {{.KUBECTL}} -n {{.NAMESPACE}} logs "job/${job_name}" --tail=120 || true
             printf 'Timed out waiting for job/%s.\n' "${job_name}" >&2
             exit 1
           fi

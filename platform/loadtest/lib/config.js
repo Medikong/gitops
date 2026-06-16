@@ -1,126 +1,40 @@
-function optional(name, fallback = '') {
-  const value = __ENV[name];
-  return value === undefined || value === null || value === '' ? fallback : value;
-}
+import { getCommonConfig } from './config/common.js';
+import { getDatasetConfig } from './config/dataset.js';
+import { getReadApiBaselineConfig } from './config/scenarios/read-api-baseline.js';
+import { getReservationJourneyConfig } from './config/scenarios/reservation-journey.js';
 
-function required(name) {
-  const value = optional(name);
-  if (!value) {
-    throw new Error(`${name} is required`);
+function scenarioConfig(scenario) {
+  if (scenario === 'setup-read-dataset') {
+    return getDatasetConfig();
   }
-  return value;
-}
-
-function positiveNumber(name, fallback) {
-  const raw = optional(name, String(fallback));
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`${name} must be a positive number`);
+  if (scenario === 'read-api-baseline') {
+    return getReadApiBaselineConfig();
   }
-  return value;
-}
-
-function nonNegativeNumber(name, fallback) {
-  const raw = optional(name, String(fallback));
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value < 0) {
-    throw new Error(`${name} must be a non-negative number`);
+  if (scenario === 'reservation-journey-load-test') {
+    return getReservationJourneyConfig();
   }
-  return value;
-}
-
-function positiveInteger(name, fallback) {
-  const value = positiveNumber(name, fallback);
-  if (!Number.isInteger(value)) {
-    throw new Error(`${name} must be an integer`);
-  }
-  return value;
-}
-
-function nonNegativeInteger(name, fallback) {
-  const raw = optional(name, String(fallback));
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < 0) {
-    throw new Error(`${name} must be a non-negative integer`);
-  }
-  return value;
-}
-
-function rate(name, fallback) {
-  const value = positiveNumber(name, fallback);
-  if (value >= 1) {
-    throw new Error(`${name} must be lower than 1`);
-  }
-  return value;
-}
-
-function baseUrlForTarget(target) {
-  if (target === 'local') {
-    return optional('LOADTEST_LOCAL_BASE_URL', required('LOADTEST_BASE_URL'));
-  }
-  if (target === 'aws') {
-    return optional('LOADTEST_AWS_BASE_URL', required('LOADTEST_BASE_URL'));
-  }
-  return required('LOADTEST_BASE_URL');
+  throw new Error(`unsupported LOADTEST_SCENARIO=${scenario}`);
 }
 
 export function getConfig() {
-  const target = optional('LOADTEST_TARGET', 'local');
-  const scenario = optional('LOADTEST_SCENARIO', 'read-api-baseline');
-  const environment = optional('LOADTEST_ENVIRONMENT', target);
-  const requestPrefix = optional('LOADTEST_REQUEST_PREFIX', 'loadtest');
-  const runId = optional('LOADTEST_RUN_ID', `${Date.now()}`);
-  const baseUrl = baseUrlForTarget(target).replace(/\/+$/, '');
-  const imageTag = optional('LOADTEST_IMAGE_TAG', 'unknown');
+  const common = getCommonConfig();
+  const dataset = getDatasetConfig();
+  const scenario = scenarioConfig(common.scenario);
+  const requestIdBase = `${scenario.requestPrefix}-${common.scenario}-${common.runId}`;
 
   return {
-    testType: optional('LOADTEST_TEST_TYPE', 'loadtest'),
-    scenario,
-    environment,
-    target,
-    runId,
-    baseUrl,
-    revision: optional('LOADTEST_REVISION', imageTag),
-    image: optional('LOADTEST_IMAGE'),
-    imageTag,
-    release: optional('LOADTEST_RELEASE'),
-    namespace: optional('LOADTEST_NAMESPACE'),
-    requestPrefix,
-    requestIdBase: `${requestPrefix}-${scenario}-${runId}`,
-    timeoutSeconds: positiveNumber('LOADTEST_TIMEOUT_SECONDS', 10),
-    vus: positiveInteger('LOADTEST_VUS', 5),
-    duration: optional('LOADTEST_DURATION', '2m'),
-    gracefulStop: optional('LOADTEST_GRACEFUL_STOP', '30s'),
-    thinkTimeSeconds: nonNegativeNumber('LOADTEST_THINK_TIME_SECONDS', 0),
-    concertLimit: positiveInteger('LOADTEST_CONCERT_LIMIT', 50),
-    performanceLimit: positiveInteger('LOADTEST_PERFORMANCE_LIMIT', 50),
-    seatLimit: positiveInteger('LOADTEST_SEAT_LIMIT', 200),
-    thresholds: {
-      httpReqFailedRate: rate('LOADTEST_THRESHOLD_HTTP_REQ_FAILED_RATE', 0.01),
-      httpReqDurationP95Ms: positiveNumber('LOADTEST_THRESHOLD_HTTP_REQ_DURATION_P95_MS', 500),
-      httpReqDurationP99Ms: positiveNumber('LOADTEST_THRESHOLD_HTTP_REQ_DURATION_P99_MS', 1000),
-      checksRate: rate('LOADTEST_THRESHOLD_CHECKS_RATE', 0.99),
-    },
-    dataset: {
-      profile: optional('LOADTEST_DATASET_PROFILE', 'read-api-basic'),
-      revision: optional('LOADTEST_DATASET_REVISION', 'v1'),
-      titlePrefix: optional('LOADTEST_DATASET_TITLE_PREFIX', 'Medikong Loadtest'),
-      venuePrefix: optional('LOADTEST_DATASET_VENUE_PREFIX', 'Loadtest Hall'),
-      concerts: positiveInteger('LOADTEST_DATASET_CONCERTS', 20),
-      performancesPerConcert: positiveInteger('LOADTEST_DATASET_PERFORMANCES_PER_CONCERT', 2),
-      seatSections: positiveInteger('LOADTEST_DATASET_SEAT_SECTIONS', 1),
-      seatRows: positiveInteger('LOADTEST_DATASET_SEAT_ROWS', 10),
-      seatsPerRow: positiveInteger('LOADTEST_DATASET_SEATS_PER_ROW', 30),
-      lookaheadDays: nonNegativeInteger('LOADTEST_DATASET_LOOKAHEAD_DAYS', 14),
-      startsAtSpacingMinutes: positiveInteger('LOADTEST_DATASET_STARTS_AT_SPACING_MINUTES', 180),
-      discoveryLimit: positiveInteger('LOADTEST_DATASET_DISCOVERY_LIMIT', 200),
-      createPauseSeconds: nonNegativeNumber('LOADTEST_DATASET_CREATE_PAUSE_SECONDS', 0),
-      providerEmail: optional('LOADTEST_PROVIDER_EMAIL'),
-      providerPassword: optional('LOADTEST_PROVIDER_PASSWORD'),
-      adminEmail: optional('LOADTEST_ADMIN_EMAIL'),
-      adminPassword: optional('LOADTEST_ADMIN_PASSWORD'),
-    },
+    ...common,
+    ...scenario,
+    dataset: dataset.dataset,
+    customerPool: dataset.customerPool,
+    requestIdBase,
   };
+}
+
+export function requireCustomerPool(config) {
+  if (!config.customerPool.password) {
+    throw new Error('LOADTEST_CUSTOMER_POOL_PASSWORD required for reservation journey loadtest');
+  }
 }
 
 export function requireDatasetCredentials(config) {

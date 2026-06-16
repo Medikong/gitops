@@ -26,6 +26,15 @@ function routeLabel(step, method, path) {
     'read_api.concerts': 'GET /concerts',
     'read_api.performances': 'GET /concerts/{id}/performances',
     'read_api.seats': 'GET /performances/{id}/seats',
+    'dataset.customer.signup': 'POST /auth/signup',
+    'dataset.customer.login_verify': 'POST /auth/login',
+    'reservation_journey.auth.login': 'POST /auth/login',
+    'reservation_journey.concerts': 'GET /concerts',
+    'reservation_journey.performances': 'GET /concerts/{id}/performances',
+    'reservation_journey.seats': 'GET /performances/{id}/seats',
+    'reservation_journey.reservation.create': 'POST /reservations',
+    'reservation_journey.payment.approve': 'POST /payments',
+    'reservation_journey.ticket.list': 'GET /tickets/me',
   };
   return knownReadRoutes[step] || `${method} ${step || path}`;
 }
@@ -92,6 +101,7 @@ export function requestWithExpectedStatuses(config, step, method, path, body = n
       ...extraHeaders,
     },
     timeout: `${config.timeoutSeconds}s`,
+    responseCallback: http.expectedStatuses(...expectedStatuses),
     tags: {
       environment: config.environment,
       profile: config.dataset.profile,

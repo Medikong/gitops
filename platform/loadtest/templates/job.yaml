@@ -46,5 +46,5 @@ spec:
         app.kubernetes.io/component: k6-runner
         medikong.io/execution: gitops-manual
     spec:
-{{ include "read-api-loadtest.podSpec" (dict "root" . "scenario" .Values.loadtest.scenario) | indent 6 }}
+{{ include "read-api-loadtest.podSpec" (dict "root" . "scenario" .Values.loadtest.scenario "credentialsSecretName" .Values.loadtest.credentialsSecretName) | indent 6 }}
 {{- end }}

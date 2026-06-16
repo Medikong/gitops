@@ -18,19 +18,54 @@ data:
   LOADTEST_IMAGE_TAG: {{ .Values.image.tag | quote }}
   LOADTEST_RELEASE: {{ .Release.Name | quote }}
   LOADTEST_NAMESPACE: {{ include "read-api-loadtest.namespace" . | quote }}
-  LOADTEST_TIMEOUT_SECONDS: {{ .Values.loadtest.timeoutSeconds | quote }}
-  LOADTEST_REQUEST_PREFIX: {{ .Values.loadtest.requestPrefix | quote }}
-  LOADTEST_VUS: {{ .Values.loadtest.vus | quote }}
-  LOADTEST_DURATION: {{ .Values.loadtest.duration | quote }}
-  LOADTEST_GRACEFUL_STOP: {{ .Values.loadtest.gracefulStop | quote }}
-  LOADTEST_THINK_TIME_SECONDS: {{ .Values.loadtest.thinkTimeSeconds | quote }}
-  LOADTEST_CONCERT_LIMIT: {{ .Values.loadtest.concertLimit | quote }}
-  LOADTEST_PERFORMANCE_LIMIT: {{ .Values.loadtest.performanceLimit | quote }}
-  LOADTEST_SEAT_LIMIT: {{ .Values.loadtest.seatLimit | quote }}
-  LOADTEST_THRESHOLD_HTTP_REQ_FAILED_RATE: {{ .Values.loadtest.thresholds.httpReqFailedRate | quote }}
-  LOADTEST_THRESHOLD_HTTP_REQ_DURATION_P95_MS: {{ .Values.loadtest.thresholds.httpReqDurationP95Ms | quote }}
-  LOADTEST_THRESHOLD_HTTP_REQ_DURATION_P99_MS: {{ .Values.loadtest.thresholds.httpReqDurationP99Ms | quote }}
-  LOADTEST_THRESHOLD_CHECKS_RATE: {{ .Values.loadtest.thresholds.checksRate | quote }}
+  LOADTEST_DATASET_REQUEST_PREFIX: {{ .Values.dataset.requestPrefix | quote }}
+  LOADTEST_DATASET_TIMEOUT_SECONDS: {{ .Values.dataset.timeoutSeconds | quote }}
+  LOADTEST_DATASET_THRESHOLD_HTTP_REQ_FAILED_RATE: {{ .Values.dataset.thresholds.httpReqFailedRate | quote }}
+  LOADTEST_DATASET_THRESHOLD_HTTP_REQ_DURATION_P95_MS: {{ .Values.dataset.thresholds.httpReqDurationP95Ms | quote }}
+  LOADTEST_DATASET_THRESHOLD_HTTP_REQ_DURATION_P99_MS: {{ .Values.dataset.thresholds.httpReqDurationP99Ms | quote }}
+  LOADTEST_DATASET_THRESHOLD_CHECKS_RATE: {{ .Values.dataset.thresholds.checksRate | quote }}
+  LOADTEST_READ_API_REQUEST_PREFIX: {{ .Values.scenarios.readApiBaseline.requestPrefix | quote }}
+  LOADTEST_READ_API_TIMEOUT_SECONDS: {{ .Values.scenarios.readApiBaseline.timeoutSeconds | quote }}
+  LOADTEST_READ_API_VUS: {{ .Values.scenarios.readApiBaseline.vus | quote }}
+  LOADTEST_READ_API_DURATION: {{ .Values.scenarios.readApiBaseline.duration | quote }}
+  LOADTEST_READ_API_STAGES: {{ toJson .Values.scenarios.readApiBaseline.stages | quote }}
+  LOADTEST_READ_API_GRACEFUL_STOP: {{ .Values.scenarios.readApiBaseline.gracefulStop | quote }}
+  LOADTEST_READ_API_THINK_TIME_SECONDS: {{ .Values.scenarios.readApiBaseline.thinkTimeSeconds | quote }}
+  LOADTEST_READ_API_CONCERT_LIMIT: {{ .Values.scenarios.readApiBaseline.concertLimit | quote }}
+  LOADTEST_READ_API_PERFORMANCE_LIMIT: {{ .Values.scenarios.readApiBaseline.performanceLimit | quote }}
+  LOADTEST_READ_API_SEAT_LIMIT: {{ .Values.scenarios.readApiBaseline.seatLimit | quote }}
+  LOADTEST_READ_API_THRESHOLD_HTTP_REQ_FAILED_RATE: {{ .Values.scenarios.readApiBaseline.thresholds.httpReqFailedRate | quote }}
+  LOADTEST_READ_API_THRESHOLD_HTTP_REQ_DURATION_P95_MS: {{ .Values.scenarios.readApiBaseline.thresholds.httpReqDurationP95Ms | quote }}
+  LOADTEST_READ_API_THRESHOLD_HTTP_REQ_DURATION_P99_MS: {{ .Values.scenarios.readApiBaseline.thresholds.httpReqDurationP99Ms | quote }}
+  LOADTEST_READ_API_THRESHOLD_CHECKS_RATE: {{ .Values.scenarios.readApiBaseline.thresholds.checksRate | quote }}
+  LOADTEST_RESERVATION_JOURNEY_REQUEST_PREFIX: {{ .Values.scenarios.reservationJourney.requestPrefix | quote }}
+  LOADTEST_RESERVATION_JOURNEY_TIMEOUT_SECONDS: {{ .Values.scenarios.reservationJourney.timeoutSeconds | quote }}
+  LOADTEST_RESERVATION_JOURNEY_VUS: {{ .Values.scenarios.reservationJourney.vus | quote }}
+  LOADTEST_RESERVATION_JOURNEY_DURATION: {{ .Values.scenarios.reservationJourney.duration | quote }}
+  LOADTEST_RESERVATION_JOURNEY_STAGES: {{ toJson .Values.scenarios.reservationJourney.stages | quote }}
+  LOADTEST_RESERVATION_JOURNEY_GRACEFUL_STOP: {{ .Values.scenarios.reservationJourney.gracefulStop | quote }}
+  LOADTEST_RESERVATION_JOURNEY_THINK_TIME_SECONDS: {{ .Values.scenarios.reservationJourney.thinkTimeSeconds | quote }}
+  LOADTEST_RESERVATION_JOURNEY_POLL_SECONDS: {{ .Values.scenarios.reservationJourney.pollSeconds | quote }}
+  LOADTEST_RESERVATION_JOURNEY_POLL_INTERVAL_SECONDS: {{ .Values.scenarios.reservationJourney.pollIntervalSeconds | quote }}
+  LOADTEST_RESERVATION_JOURNEY_PAYMENT_AMOUNT: {{ .Values.scenarios.reservationJourney.paymentAmount | quote }}
+  LOADTEST_RESERVATION_JOURNEY_MAX_SEAT_ATTEMPTS: {{ .Values.scenarios.reservationJourney.maxSeatAttempts | quote }}
+  LOADTEST_RESERVATION_JOURNEY_CONCERT_LIMIT: {{ .Values.scenarios.reservationJourney.concertLimit | quote }}
+  LOADTEST_RESERVATION_JOURNEY_PERFORMANCE_LIMIT: {{ .Values.scenarios.reservationJourney.performanceLimit | quote }}
+  LOADTEST_RESERVATION_JOURNEY_SEAT_LIMIT: {{ .Values.scenarios.reservationJourney.seatLimit | quote }}
+  LOADTEST_RESERVATION_JOURNEY_THRESHOLD_HTTP_REQ_FAILED_RATE: {{ .Values.scenarios.reservationJourney.thresholds.httpReqFailedRate | quote }}
+  LOADTEST_RESERVATION_JOURNEY_THRESHOLD_HTTP_REQ_DURATION_P95_MS: {{ .Values.scenarios.reservationJourney.thresholds.httpReqDurationP95Ms | quote }}
+  LOADTEST_RESERVATION_JOURNEY_THRESHOLD_HTTP_REQ_DURATION_P99_MS: {{ .Values.scenarios.reservationJourney.thresholds.httpReqDurationP99Ms | quote }}
+  LOADTEST_RESERVATION_JOURNEY_THRESHOLD_CHECKS_RATE: {{ .Values.scenarios.reservationJourney.thresholds.checksRate | quote }}
+  LOADTEST_RESERVATION_JOURNEY_THRESHOLD_SUCCESS_RATE: {{ .Values.scenarios.reservationJourney.thresholds.successRate | quote }}
+  LOADTEST_RESERVATION_JOURNEY_THRESHOLD_CONFLICT_RATE: {{ .Values.scenarios.reservationJourney.thresholds.conflictRate | quote }}
+  LOADTEST_RESERVATION_JOURNEY_THRESHOLD_TICKET_ISSUED_RATE: {{ .Values.scenarios.reservationJourney.thresholds.ticketIssuedRate | quote }}
+  LOADTEST_CUSTOMER_POOL_SIZE: {{ .Values.dataset.customerPool.size | quote }}
+  LOADTEST_CUSTOMER_POOL_EMAIL_PREFIX: {{ .Values.dataset.customerPool.emailPrefix | quote }}
+  LOADTEST_CUSTOMER_POOL_EMAIL_DOMAIN: {{ .Values.dataset.customerPool.emailDomain | quote }}
+  LOADTEST_CUSTOMER_POOL_PASSWORD: {{ .Values.dataset.customerPool.password | quote }}
+  LOADTEST_CUSTOMER_POOL_REVISION: {{ default .Values.dataset.revision .Values.dataset.customerPool.revision | quote }}
+  LOADTEST_CUSTOMER_POOL_DISPLAY_NAME_PREFIX: {{ .Values.dataset.customerPool.displayNamePrefix | quote }}
+  LOADTEST_CUSTOMER_POOL_PAD_WIDTH: {{ .Values.dataset.customerPool.padWidth | quote }}
   LOADTEST_DATASET_PROFILE: {{ .Values.dataset.profile | quote }}
   LOADTEST_DATASET_REVISION: {{ .Values.dataset.revision | quote }}
   LOADTEST_DATASET_TITLE_PREFIX: {{ .Values.dataset.titlePrefix | quote }}

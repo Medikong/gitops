@@ -18,6 +18,8 @@ dataset:
   seatRows: 10
   seatsPerRow: 30
   createPauseSeconds: 0.5
+  customerPool:
+    size: 10
   cronJob:
     suspend: true
     schedule: "5 */6 * * *"
@@ -33,11 +35,29 @@ loadtest:
   baseUrl: http://kong-kong-proxy.kong.svc.cluster.local
   localBaseUrl: http://kong-kong-proxy.kong.svc.cluster.local
   awsBaseUrl: http://kong-kong-proxy.kong.svc.cluster.local
-  vus: 1
-  duration: 30s
-  thinkTimeSeconds: 2
-  thresholds:
-    httpReqFailedRate: "0.01"
-    httpReqDurationP95Ms: "500"
-    httpReqDurationP99Ms: "1000"
-    checksRate: "0.99"
+
+scenarios:
+  readApiBaseline:
+    vus: 1
+    duration: 30s
+    stages:
+      - duration: 30s
+        target: 1
+    thinkTimeSeconds: 2
+    thresholds:
+      httpReqFailedRate: "0.01"
+      httpReqDurationP95Ms: "500"
+      httpReqDurationP99Ms: "1000"
+      checksRate: "0.99"
+  reservationJourney:
+    vus: 1
+    duration: 30s
+    stages:
+      - duration: 30s
+        target: 1
+    thinkTimeSeconds: 2
+    thresholds:
+      httpReqFailedRate: "0.01"
+      httpReqDurationP95Ms: "750"
+      httpReqDurationP99Ms: "1500"
+      checksRate: "0.99"

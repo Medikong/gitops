@@ -7,6 +7,10 @@ function emit(event, fields) {
   }));
 }
 
+function compact(fields) {
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
+}
+
 function datasetShape(config) {
   const seatsPerPerformance = (
     config.dataset.seatSections
@@ -28,11 +32,15 @@ function datasetShape(config) {
     dataset_seats_per_performance: seatsPerPerformance,
     dataset_total_seats: totalPerformances * seatsPerPerformance,
     dataset_discovery_limit: config.dataset.discoveryLimit,
+    customer_pool_size: config.customerPool.size,
+    customer_pool_revision: config.customerPool.revision,
+    customer_pool_email_prefix: config.customerPool.emailPrefix,
+    customer_pool_email_domain: config.customerPool.emailDomain,
   };
 }
 
 export function logExperimentConditions(config, phase) {
-  emit('loadtest_experiment_conditions', {
+  emit('loadtest_experiment_conditions', compact({
     loadtest_run_id: config.runId,
     phase,
     scenario: config.scenario,
@@ -46,8 +54,13 @@ export function logExperimentConditions(config, phase) {
     namespace: config.namespace,
     vus: config.vus,
     duration: config.duration,
+    stages: config.stages,
     graceful_stop: config.gracefulStop,
     think_time_seconds: config.thinkTimeSeconds,
+    poll_seconds: config.pollSeconds,
+    poll_interval_seconds: config.pollIntervalSeconds,
+    payment_amount: config.paymentAmount,
+    max_seat_attempts: config.maxSeatAttempts,
     concert_limit: config.concertLimit,
     performance_limit: config.performanceLimit,
     seat_limit: config.seatLimit,
@@ -55,9 +68,12 @@ export function logExperimentConditions(config, phase) {
     threshold_http_req_duration_p95_ms: config.thresholds.httpReqDurationP95Ms,
     threshold_http_req_duration_p99_ms: config.thresholds.httpReqDurationP99Ms,
     threshold_checks_rate: config.thresholds.checksRate,
+    threshold_reservation_journey_success_rate: config.thresholds.reservationJourneySuccessRate,
+    threshold_reservation_conflict_rate: config.thresholds.reservationConflictRate,
+    threshold_ticket_issued_rate: config.thresholds.ticketIssuedRate,
     measurement_window_source: 'grafana_time_range',
     ...datasetShape(config),
-  });
+  }));
 }
 
 export function logRunStarted(config) {
@@ -92,6 +108,11 @@ export function logRunFinished(config, state = {}) {
     target_base_url: config.baseUrl,
     concert_id: state.concertId,
     performance_id: state.performanceId,
+    showtime_id: state.showtimeId,
+    seat_id: state.seatId,
+    reservation_id: state.reservationId,
+    payment_id: state.paymentId,
+    ticket_id: state.ticketId,
     seat_count: state.seatCount,
   });
 }
@@ -107,6 +128,29 @@ export function logRunFailed(config, step, error, state = {}) {
     request_id: config.requestIdBase,
     concert_id: state.concertId,
     performance_id: state.performanceId,
+    showtime_id: state.showtimeId,
+    seat_id: state.seatId,
+    reservation_id: state.reservationId,
+    payment_id: state.paymentId,
+    ticket_id: state.ticketId,
+  });
+}
+
+export function logJourneyStep(config, step, outcome, state = {}) {
+  emit('loadtest_journey_step', {
+    loadtest_run_id: config.runId,
+    scenario: config.scenario,
+    step,
+    outcome,
+    target: config.target,
+    target_base_url: config.baseUrl,
+    concert_id: state.concertId,
+    performance_id: state.performanceId,
+    showtime_id: state.showtimeId,
+    seat_id: state.seatId,
+    reservation_id: state.reservationId,
+    payment_id: state.paymentId,
+    ticket_id: state.ticketId,
   });
 }
 
@@ -121,9 +165,16 @@ export function logDatasetFinished(config, state = {}) {
     desired_concerts: config.dataset.concerts,
     desired_performances_per_concert: config.dataset.performancesPerConcert,
     desired_seats_per_performance: config.dataset.seatSections * config.dataset.seatRows * config.dataset.seatsPerRow,
+    customer_pool_size: config.customerPool.size,
+    customer_pool_revision: config.customerPool.revision,
+    created_customers: state.createdCustomers || 0,
+    reused_customers: state.reusedCustomers || 0,
+    verified_customers: state.verifiedCustomers || 0,
     created_concerts: state.createdConcerts || 0,
     reused_concerts: state.reusedConcerts || 0,
     created_performances: state.createdPerformances || 0,
+    verified_performances: state.verifiedPerformances || 0,
+    verified_seats: state.verifiedSeats || 0,
     verified_concerts: state.verifiedConcerts || 0,
   });
 }

@@ -30,13 +30,26 @@ function pauseBetweenReadIterations(runConfig) {
   }
 }
 
+function executorConfig() {
+  if (config.stages.length > 0) {
+    return {
+      executor: 'ramping-vus',
+      stages: config.stages,
+      gracefulStop: config.gracefulStop,
+    };
+  }
+  return {
+    executor: 'constant-vus',
+    vus: config.vus,
+    duration: config.duration,
+    gracefulStop: config.gracefulStop,
+  };
+}
+
 export const options = {
   scenarios: {
     [config.scenario]: {
-      executor: 'constant-vus',
-      vus: config.vus,
-      duration: config.duration,
-      gracefulStop: config.gracefulStop,
+      ...executorConfig(),
       tags: {
         environment: config.environment,
         profile: config.dataset.profile,

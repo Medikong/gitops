@@ -45,8 +45,21 @@ dataset:
   startsAtSpacingMinutes: 180
   discoveryLimit: 200
   createPauseSeconds: 0
+  customerPool:
+    size: 50
+    emailPrefix: loadtest
+    emailDomain: loadtest.medikong.local
+    password: loadtest1234
+    revision: ""
+    displayNamePrefix: Loadtest Customer
+    padWidth: 6
   timeoutSeconds: 15
   requestPrefix: loadtest-dataset
+  thresholds:
+    httpReqFailedRate: "0.01"
+    httpReqDurationP95Ms: "3000"
+    httpReqDurationP99Ms: "5000"
+    checksRate: "0.99"
   cronJob:
     enabled: true
     suspend: true
@@ -99,25 +112,65 @@ resources:
 loadtest:
   testType: loadtest
   scenario: read-api-baseline
+  credentialsSecretName: ""
   target: local
   revision: ""
   baseUrl: http://kong-kong-proxy.kong.svc.cluster.local
   localBaseUrl: http://kong-kong-proxy.kong.svc.cluster.local
   awsBaseUrl: http://kong-kong-proxy.kong.svc.cluster.local
-  timeoutSeconds: 10
-  requestPrefix: loadtest
-  vus: 5
-  duration: 2m
-  gracefulStop: 30s
-  thinkTimeSeconds: 0
-  concertLimit: 50
-  performanceLimit: 50
-  seatLimit: 200
-  thresholds:
-    httpReqFailedRate: "0.01"
-    httpReqDurationP95Ms: "500"
-    httpReqDurationP99Ms: "1000"
-    checksRate: "0.99"
+
+scenarios:
+  readApiBaseline:
+    requestPrefix: loadtest-read
+    timeoutSeconds: 10
+    vus: 5
+    duration: 2m
+    stages:
+      - duration: 1m
+        target: 1
+      - duration: 1m
+        target: 3
+      - duration: 1m
+        target: 5
+    gracefulStop: 30s
+    thinkTimeSeconds: 0
+    concertLimit: 50
+    performanceLimit: 50
+    seatLimit: 200
+    thresholds:
+      httpReqFailedRate: "0.01"
+      httpReqDurationP95Ms: "500"
+      httpReqDurationP99Ms: "1000"
+      checksRate: "0.99"
+  reservationJourney:
+    requestPrefix: loadtest-reservation
+    timeoutSeconds: 10
+    vus: 5
+    duration: 2m
+    stages:
+      - duration: 1m
+        target: 1
+      - duration: 1m
+        target: 3
+      - duration: 1m
+        target: 5
+    gracefulStop: 30s
+    thinkTimeSeconds: 0
+    pollSeconds: 45
+    pollIntervalSeconds: 2
+    paymentAmount: 50000
+    maxSeatAttempts: 3
+    concertLimit: 50
+    performanceLimit: 50
+    seatLimit: 200
+    thresholds:
+      httpReqFailedRate: "0.01"
+      httpReqDurationP95Ms: "500"
+      httpReqDurationP99Ms: "1000"
+      checksRate: "0.99"
+      successRate: "0.99"
+      conflictRate: "0.05"
+      ticketIssuedRate: "0.99"
 
 k6:
   output: ""

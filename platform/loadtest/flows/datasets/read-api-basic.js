@@ -169,6 +169,7 @@ function verifySeats(config, performance) {
   if (seats.length === 0) {
     fail(`dataset.seats.verify returned no seats for performance ${performanceId}`);
   }
+  return seats.length;
 }
 
 function createPerformanceWithSeats(config, providerToken, concert, concertIndex, performanceIndex) {
@@ -191,6 +192,8 @@ export function setupReadApiBasicDataset(config, tokens) {
     reusedConcerts: 0,
     createdPerformances: 0,
     verifiedConcerts: 0,
+    verifiedPerformances: 0,
+    verifiedSeats: 0,
   };
 
   for (let index = 1; index <= config.dataset.concerts; index += 1) {
@@ -219,7 +222,8 @@ export function setupReadApiBasicDataset(config, tokens) {
     if (verifiedPerformances.length < config.dataset.performancesPerConcert) {
       fail(`dataset.performances.verify expected ${config.dataset.performancesPerConcert} performances for ${title}, got ${verifiedPerformances.length}`);
     }
-    verifySeats(config, verifiedPerformances[0]);
+    state.verifiedPerformances += verifiedPerformances.length;
+    state.verifiedSeats += verifySeats(config, verifiedPerformances[0]);
     state.verifiedConcerts += 1;
     pauseAfterDatasetUnit(config);
   }

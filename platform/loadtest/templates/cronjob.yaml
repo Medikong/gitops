@@ -23,5 +23,5 @@ spec:
 {{ include "read-api-loadtest.labelsForScenario" (dict "root" . "scenario" .Values.loadtest.scenario) | indent 12 }}
             app.kubernetes.io/component: k6-runner
         spec:
-{{ include "read-api-loadtest.podSpec" (dict "root" . "scenario" .Values.loadtest.scenario) | indent 10 }}
+{{ include "read-api-loadtest.podSpec" (dict "root" . "scenario" .Values.loadtest.scenario "credentialsSecretName" .Values.loadtest.credentialsSecretName) | indent 10 }}
 {{- end }}

@@ -16,17 +16,41 @@ GET /performances/{id}/seats
 목록 응답은 `items` 배열을 기준으로 읽고, VU/iteration 값으로 concert와 performance를 고른다.
 좌석 예약, 결제, 티켓 발급 같은 write path는 실행하지 않는다.
 
+`reservation-journey-load-test`는 write path를 포함하는 별도 시나리오다.
+synthetic E2E처럼 해피패스를 확인하지만 목적은 낮은 트래픽 생존성 확인이 아니라 VU를 단계적으로 올려 예매 과정의 첫 병목을 찾는 것이다.
+
+```text
+POST /auth/login
+GET /concerts
+GET /concerts/{id}/performances
+GET /performances/{id}/seats
+POST /reservations
+POST /payments
+GET /tickets/me
+```
+
+기본 좌석 선택은 dataset concert 안에서 run id 기반으로 분산한다.
+좌석 경쟁 자체를 확인하는 실험은 별도 시나리오로 둔다.
+`reservation_id`, `payment_id`, `ticket_id` 같은 동적 ID는 metric label/tag가 아니라 JSON 로그 필드에만 남긴다.
+단계별 latency는 `step` tag가 붙은 `http_req_duration`으로 보고, 예매 성공률, 409 비율, 티켓 발급률은 custom metric threshold로 본다.
+
 `setup-read-dataset`은 부하테스트용 fake read dataset을 준비한다.
 이 시나리오는 provider/admin write API를 사용하므로 read baseline 결과와 섞지 않는다.
 생성 대상은 `dataset.profile`, `dataset.revision`, 수량 값으로 조절한다.
 `flows/dataset.js`는 profile registry만 담당하고, 실제 데이터셋 구성은 `flows/datasets/<profile>.js`가 소유한다.
 새 케이스가 필요하면 profile 파일을 추가하고 registry에 등록한다.
 
+`reservation-journey` profile은 예매 과정 부하테스트 전용 dataset이다.
+`POST /auth/signup` 제품 API로 fresh customer pool을 먼저 만들고, 이미 존재하는 계정은 409를 허용한 뒤 login으로 검증한다.
+계정 email은 `loadtest-<revision>-000001@loadtest.medikong.local`처럼 결정적으로 만들며, 같은 revision 재실행은 같은 계정을 검증하고 새 revision은 fresh pool을 만든다.
+공연/회차/좌석은 read baseline과 같은 생성 패턴을 쓰지만 `dataset.profile=reservation-journey` prefix로 분리된다.
+
 예를 들어 공연 수를 넓게 퍼뜨리는 `read-api-wide`, 좌석 맵이 큰 `large-seat-map`, 공연 회차가 많은 `many-performances` 같은 profile을 추가할 수 있다.
 이때 `setup-read-dataset` scenario, Helm template, CronJob, GitOps manualRuns는 바꾸지 않고 `dataset.profile` 값만 바꿔 실행한다.
 
 ```text
 provider/admin login
+customer pool signup 또는 login 검증
 venue 생성
 concert N개 생성 또는 기존 공개 dataset 재사용
 concert별 performance M개 보강
@@ -43,11 +67,31 @@ OpenTelemetry Collector는 Kubernetes stdout/stderr를 `filelog` receiver로 읽
 
 그래서 loadtest runner는 Loki client를 직접 쓰지 않는다.
 k6 실행 로그와 `handleSummary` 결과를 stdout JSON line으로 남기고, Collector가 기존 경로로 수집한다.
-구분 필드는 `test_type=loadtest`, `scenario=read-api-baseline`, `step=read_api.*`이고, chart label과 namespace도 synthetic과 분리한다.
+구분 필드는 `test_type=loadtest`, scenario 이름, `step`이고, chart label과 namespace도 synthetic과 분리한다.
 
 실험 조건은 실행 시점에 `loadtest_experiment_conditions` 이벤트로 별도 기록한다.
 이 이벤트에는 `environment`, `target`, `target_base_url`, `scenario`, `vus`, `duration`, threshold, dataset profile/revision, 계산된 dataset 총량, runner image tag, `revision`이 들어간다.
 발표 자료나 회고에서는 Grafana time range와 이 이벤트를 함께 보고 같은 조건을 다시 재현한다.
+
+## Scenario conditions
+
+실행 공통 조건과 실험 조건은 분리한다.
+`loadtest`는 scenario 선택, target, base URL, image revision처럼 모든 실행에 필요한 값만 둔다.
+실험 조건은 파일과 values key를 시나리오별로 둔다.
+
+```text
+lib/config/common.js
+lib/config/dataset.js
+lib/config/scenarios/read-api-baseline.js
+lib/config/scenarios/reservation-journey.js
+values/scenarios/setup-read-dataset.yaml
+values/scenarios/read-api-baseline.yaml
+values/scenarios/reservation-journey-load-test.yaml
+```
+
+조회 기준선의 VU, duration, stages, read limit, threshold는 `scenarios.readApiBaseline`에서만 조절한다.
+예매 여정의 VU, duration, stages, polling, 결제 금액, 좌석 재시도, threshold는 `scenarios.reservationJourney`에서만 조절한다.
+dataset setup 조건은 `dataset` 아래에 두고, fresh pool은 `dataset.revision` 또는 `dataset.customerPool.revision`으로 분리한다.
 
 ## Commands
 
@@ -56,15 +100,26 @@ aws-dev는 GitOps sync와 Kubernetes CronJob이 dataset 준비와 read baseline 
 수동 실행도 `kubectl create job`이 아니라 `manualRuns.*.enabled`와 `manualRuns.*.runId` 값을 GitOps로 바꿔 선언한다.
 
 로컬에서는 개발 편의를 위해 Taskfile 명령으로 직접 실행한다.
-`dev:loadtest`는 로컬 Secret, image, Helm release를 준비한 뒤 dataset setup과 read baseline을 순차 실행한다.
+`dev:loadtest`는 로컬 registry, Secret, image, Helm release를 준비한 뒤 dataset setup과 선택한 시나리오를 순차 실행한다.
 배포만 필요하면 `dev:loadtest:deploy`를 사용한다.
 공개 concert ingress는 Kong rate limit이 `minute: 120`으로 설정되어 있으므로, 기본 local/aws-dev values는 `thinkTimeSeconds`를 둬 한도 안에서 기준선을 확인한다.
-rate limit이나 병목을 일부러 확인하려면 `loadtest.vus`, `loadtest.duration`, `loadtest.thinkTimeSeconds`, threshold 값을 GitOps values로 조정한다.
+예매 여정 부하테스트는 한계 지점을 보기 위해 `thinkTimeSeconds: 0`, 최대 50 VU ramp로 실행한다.
+로컬에서 `reservation-journey-load-test`를 실행하면 기본적으로 `ticketing-rate-limit-*` Kong plugin의 `minute` 값을 크게 올리고, 명령 종료 시 기본값 `120`으로 되돌린다.
+Kong rate limit을 포함한 제품 경로 기준선을 보려면 `LOADTEST_DISABLE_KONG_RATE_LIMIT=false`를 명시한다.
 
 ```bash
+SCENARIO=read-api-baseline task --dir gitops dev:loadtest
+SCENARIO=reservation-journey-load-test task --dir gitops dev:loadtest
+LOADTEST_DISABLE_KONG_RATE_LIMIT=false SCENARIO=reservation-journey-load-test task --dir gitops dev:loadtest
+
 task --dir gitops/platform/loadtest lint
 task --dir gitops/platform/loadtest render
 LOADTEST_VALUES_FILE=values/aws-dev.yaml task --dir gitops/platform/loadtest render
+LOADTEST_SCENARIO_VALUES_FILE=values/scenarios/reservation-journey-load-test.yaml task --dir gitops/platform/loadtest render
+SCENARIO=reservation-journey-load-test task --dir gitops/platform/loadtest run-local
+LOADTEST_DISABLE_KONG_RATE_LIMIT=false SCENARIO=reservation-journey-load-test task --dir gitops/platform/loadtest run-local
+task --dir gitops/platform/loadtest kong-rate-limit:status
+task --dir gitops/platform/loadtest kong-rate-limit:restore
 task --dir gitops/platform/loadtest deploy
 task --dir gitops/platform/loadtest setup-dataset
 task --dir gitops/platform/loadtest run
@@ -104,4 +159,31 @@ manualRuns:
 ```
 
 같은 수동 Job을 다시 만들려면 `runId`를 새 값으로 바꾼다.
+`reservation-journey-load-test` 실행 예시:
+
+```yaml
+loadtest:
+  scenario: reservation-journey-load-test
+dataset:
+  profile: reservation-journey
+  revision: reservation-20260615-001
+  customerPool:
+    size: 100
+    revision: reservation-20260615-001
+scenarios:
+  reservationJourney:
+    requestPrefix: loadtest-reservation
+    stages:
+      - duration: 2m
+        target: 2
+      - duration: 2m
+        target: 5
+      - duration: 2m
+        target: 10
+```
+
 dataset setup에는 `LOADTEST_PROVIDER_EMAIL`, `LOADTEST_PROVIDER_PASSWORD`, `LOADTEST_ADMIN_EMAIL`, `LOADTEST_ADMIN_PASSWORD`를 가진 `dataset.credentialsSecretName` Secret이 필요하다.
+reservation journey 본 실행은 signup을 측정 구간에 포함하지 않는다.
+실행 전에 `dataset.profile=reservation-journey`로 dataset setup을 돌려 customer pool과 예매용 공연/회차/좌석을 준비한다.
+fresh pool을 만들려면 `dataset.revision` 또는 `dataset.customerPool.revision`을 새 값으로 바꾼다.
+본 실행은 `LOADTEST_CUSTOMER_POOL_*` 값으로 계정을 계산해 VU/iteration별로 분산 선택하고, metric tag에는 customer email, user id, reservation id, payment id, ticket id를 넣지 않는다.
