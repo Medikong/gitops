@@ -17,6 +17,7 @@ platform/observability
   - OpenTelemetry Collector trace pipeline
   - Tempo trace backend
   - Loki log backend
+  - Pyroscope profile backend
 ```
 
 ## 컴포넌트
@@ -38,6 +39,12 @@ loki/
   - Loki Helm values
   - log retention/storage/resource 기준
   - label/cardinality 정책
+  - 로컬 render Taskfile
+
+pyroscope/
+  - Pyroscope Helm values
+  - Python SDK push profile 수신 backend
+  - Grafana Pyroscope datasource 대상
   - 로컬 render Taskfile
 ```
 
@@ -66,12 +73,19 @@ log
   -> Loki
   -> Grafana
 
+profile
+  Python Pyroscope SDK
+  -> Pyroscope
+  -> Grafana
+
 audit log
   business event/outbox
   -> 별도 검색/증적 파이프라인
 ```
 
 Collector는 trace용 OTLP receiver와 Tempo exporter pipeline, 기술 로그용 filelog receiver와 Loki OTLP exporter pipeline을 함께 가진다. metric scrape, audit log pipeline, trace tail sampling 정책은 별도 작업으로 분리한다.
+
+Profile은 OpenTelemetry Collector를 기본 수집 경로로 쓰지 않는다. Python 서비스가 `PYROSCOPE_ENABLED=true`일 때만 Pyroscope SDK로 `pyroscope.observability.svc.cluster.local:4040`에 push한다.
 
 운영 로그 수집/보존 정책은 `log-policy.md`가 기준이다. Loki는 모든 request/access log 원장이 아니며, Prometheus/Tempo/Loki/감사성 증적 파이프라인의 책임 경계를 섞지 않는다.
 
@@ -85,13 +99,14 @@ storage-aws-dev                  sync-wave -30
 monitoring-aws-dev               sync-wave -20
 tempo-aws-dev                    sync-wave -18
 loki-aws-dev                     sync-wave -18
+pyroscope-aws-dev                sync-wave -18
 opentelemetry-collector-aws-dev  sync-wave -17
 service applications service path
 ```
 
 `aws-ebs-csi-driver-aws-dev`는 self-managed kubeadm EC2 클러스터에 EBS CSI driver를 먼저 설치한다. 이어서 `storage-aws-dev`가 `platform/storage`의 EBS CSI `gp3` StorageClass를 적용한다. Tempo/Loki aws-dev values는 `medikong-aws-gp3`를 명시하므로 클러스터 default StorageClass가 없어도 의도한 AWS EBS 동적 PVC 정책을 사용한다.
 
-Tempo/Loki Application은 `CreateNamespace=true`와 `managedNamespaceMetadata`로 `observability` namespace를 만든다. Grafana datasource는 `platform/monitoring/values/kube-prometheus-stack.yaml`에서 Tempo/Loki service DNS를 바라본다.
+Tempo/Loki/Pyroscope Application은 `CreateNamespace=true`와 `managedNamespaceMetadata`로 `observability` namespace를 만든다. Grafana datasource는 `platform/monitoring/values/kube-prometheus-stack.yaml`에서 Tempo/Loki/Pyroscope service DNS를 바라본다.
 
 ## Image mirror
 
@@ -133,6 +148,9 @@ docker.io/otel/opentelemetry-collector-contrib:0.153.0
 
 docker.io/grafana/loki:3.6.7
   -> 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com/grafana/loki:3.6.7
+
+docker.io/grafana/pyroscope:2.0.3
+  -> 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com/grafana/pyroscope:2.0.3
 
 docker.io/kiwigrid/k8s-sidecar:2.5.0
   -> 941141115079.dkr.ecr.ap-northeast-2.amazonaws.com/kiwigrid/k8s-sidecar:2.5.0
@@ -203,6 +221,20 @@ task platform:render
 task validate
 ```
 
+auth-service 부하테스트에서 CPU hotspot을 볼 때는 기본 off 상태를 유지하다가 실험 배포에서만 켠다.
+
+```bash
+helm upgrade --install auth charts/medikong-service \
+  -f values/base.yaml \
+  -f values/env/aws-dev.yaml \
+  -f values/services/auth.yaml \
+  --set observability.profiling.enabled=true \
+  --set-string observability.profiling.tags.scenario=reservation-journey-load-test \
+  --set-string observability.profiling.tags.run_id=<loadtest-run-id>
+```
+
+profile tag는 낮은 cardinality만 사용한다. 허용 기준은 `service`, `environment`, `version`, `scenario`, `run_id`이며 `user_id`, `reservation_id`, `payment_id`, `ticket_id` 같은 요청별 ID는 tag로 넣지 않는다.
+
 Docker Desktop 로컬 배포는 `task dev` 한 번으로 Prometheus/Grafana, Tempo/Loki, Kong, data, service release를 함께 올린다. Tempo/Loki만 따로 확인하려면 각 컴포넌트 Taskfile의 `up`을 사용할 수 있다.
 
 ```bash
@@ -210,6 +242,7 @@ task dev
 task --taskfile platform/observability/collector/Taskfile.yml up
 task --taskfile platform/observability/tempo/Taskfile.yml up
 task --taskfile platform/observability/loki/Taskfile.yml up
+task --taskfile platform/observability/pyroscope/Taskfile.yml up
 ```
 
 live cluster 배포는 사용자가 명시적으로 요청할 때만 실행한다.

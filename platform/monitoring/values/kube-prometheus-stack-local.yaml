@@ -73,6 +73,12 @@ grafana:
             matcherRegex: '"trace_id"\s*:\s*"([a-fA-F0-9]{32})"'
             datasourceUid: tempo
             url: '$${__value.raw}'
+    - name: Pyroscope
+      uid: pyroscope
+      type: grafana-pyroscope-datasource
+      access: proxy
+      url: http://pyroscope.observability.svc.cluster.local:4040
+      isDefault: false
   persistence:
     enabled: false
   resources:

@@ -68,3 +68,8 @@ hpa:
   minReplicas: 1
   maxReplicas: 3
   targetCPUUtilizationPercentage: 70
+
+observability:
+  profiling:
+    serverAddress: http://pyroscope.observability.svc.cluster.local:4040
+    sampleRate: 100

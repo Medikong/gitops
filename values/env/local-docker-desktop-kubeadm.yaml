@@ -17,6 +17,12 @@ container:
       cpu: 500m
       memory: 512Mi
 
+observability:
+  profiling:
+    enabled: true
+    serverAddress: http://pyroscope.observability.svc.cluster.local:4040
+    sampleRate: 100
+
 pdb:
   enabled: false
 

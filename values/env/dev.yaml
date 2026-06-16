@@ -28,6 +28,10 @@ observability:
     enabled: true
     otlpEndpoint: http://opentelemetry-collector.observability.svc.cluster.local:4317
     excludedUrls: /health,/healthz,/readyz,/metrics
+  profiling:
+    enabled: true
+    serverAddress: http://pyroscope.observability.svc.cluster.local:4040
+    sampleRate: 100
 
 pdb:
   enabled: false

@@ -65,6 +65,17 @@ observability:
     enabled: false
     otlpEndpoint: ""
     excludedUrls: /health,/healthz,/readyz,/metrics
+  profiling:
+    enabled: false
+    serverAddress: ""
+    applicationName: ""
+    sampleRate: 100
+    oncpu: true
+    gilOnly: true
+    tags: {}
+    basicAuthUsername: ""
+    basicAuthPassword: ""
+    tenantId: ""
 
 podSecurityContext: {}
 securityContext:
