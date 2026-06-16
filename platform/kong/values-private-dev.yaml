@@ -24,7 +24,7 @@ proxy:
     enabled: true
     servicePort: 80
     containerPort: 8000
-    hostPort: 80
+    hostPort: 32047
   tls:
     enabled: true
     servicePort: 443
