@@ -68,7 +68,24 @@ containers:
       - /bin/sh
       - -ec
     args:
-      - exec k6 run --log-format=raw ${K6_OUTPUT:+--out "$K6_OUTPUT"} {{- range $root.Values.k6.extraArgs }} {{ . | quote }}{{- end }} "/loadtest/scenarios/${LOADTEST_SCENARIO}.js"
+      - |
+        set +e
+        k6 run --log-format=raw ${K6_OUTPUT:+--out "$K6_OUTPUT"} {{- range $root.Values.k6.extraArgs }} {{ . | quote }}{{- end }} "/loadtest/scenarios/${LOADTEST_SCENARIO}.js"
+        exit_code="$?"
+        set -e
+        case "${exit_code}" in
+          0)
+            exit 0
+            ;;
+          99|201)
+            printf '{"event":"loadtest_threshold_exit","timestamp":"%s","test_type":"loadtest","loadtest_run_id":"%s","scenario":"%s","exit_code":%s}\\n' \
+              "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${LOADTEST_RUN_ID:-}" "${LOADTEST_SCENARIO:-}" "${exit_code}"
+            exit 0
+            ;;
+          *)
+            exit "${exit_code}"
+            ;;
+        esac
     envFrom:
       - configMapRef:
           name: {{ include "read-api-loadtest.fullname" $root | quote }}
