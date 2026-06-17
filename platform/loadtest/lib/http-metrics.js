@@ -4,6 +4,7 @@ export const HTTP_STEP_METADATA = {
   'read_api.seats': { route: 'GET /performances/{id}/seats', service: 'concert-service' },
   'dataset.customer.signup': { route: 'POST /auth/signup', service: 'auth-service' },
   'dataset.customer.login_verify': { route: 'POST /auth/login', service: 'auth-service' },
+  'auth_login.login': { route: 'POST /auth/login', service: 'auth-service' },
   'reservation_journey.concerts': { route: 'GET /concerts', service: 'concert-service' },
   'reservation_journey.performances': { route: 'GET /concerts/{id}/performances', service: 'concert-service' },
   'reservation_journey.seats': { route: 'GET /performances/{id}/seats', service: 'concert-service' },
@@ -33,6 +34,10 @@ export const RESERVATION_JOURNEY_STEPS = [
   'reservation_journey.reservation.create',
   'reservation_journey.payment.approve',
   'reservation_journey.ticket.list',
+];
+
+export const AUTH_LOGIN_STEPS = [
+  'auth_login.login',
 ];
 
 export function routeLabel(step, method, path) {

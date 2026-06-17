@@ -48,6 +48,24 @@ data:
   LOADTEST_READ_API_THRESHOLD_HTTP_REQ_DURATION_P95_MS: {{ .Values.scenarios.readApiBaseline.thresholds.httpReqDurationP95Ms | quote }}
   LOADTEST_READ_API_THRESHOLD_HTTP_REQ_DURATION_P99_MS: {{ .Values.scenarios.readApiBaseline.thresholds.httpReqDurationP99Ms | quote }}
   LOADTEST_READ_API_THRESHOLD_CHECKS_RATE: {{ .Values.scenarios.readApiBaseline.thresholds.checksRate | quote }}
+  LOADTEST_AUTH_LOGIN_REQUEST_PREFIX: {{ .Values.scenarios.authLogin.requestPrefix | quote }}
+  LOADTEST_AUTH_LOGIN_TIMEOUT_SECONDS: {{ .Values.scenarios.authLogin.timeoutSeconds | quote }}
+  LOADTEST_AUTH_LOGIN_SETUP_TIMEOUT: {{ .Values.scenarios.authLogin.setupTimeout | quote }}
+  LOADTEST_AUTH_LOGIN_EXECUTOR: {{ .Values.scenarios.authLogin.executor | quote }}
+  LOADTEST_AUTH_LOGIN_VUS: {{ .Values.scenarios.authLogin.vus | quote }}
+  LOADTEST_AUTH_LOGIN_RATE: {{ .Values.scenarios.authLogin.rate | quote }}
+  LOADTEST_AUTH_LOGIN_TIME_UNIT: {{ .Values.scenarios.authLogin.timeUnit | quote }}
+  LOADTEST_AUTH_LOGIN_PRE_ALLOCATED_VUS: {{ .Values.scenarios.authLogin.preAllocatedVUs | quote }}
+  LOADTEST_AUTH_LOGIN_MAX_VUS: {{ .Values.scenarios.authLogin.maxVUs | quote }}
+  LOADTEST_AUTH_LOGIN_DURATION: {{ .Values.scenarios.authLogin.duration | quote }}
+  LOADTEST_AUTH_LOGIN_STAGES: {{ toJson .Values.scenarios.authLogin.stages | quote }}
+  LOADTEST_AUTH_LOGIN_GRACEFUL_STOP: {{ .Values.scenarios.authLogin.gracefulStop | quote }}
+  LOADTEST_AUTH_LOGIN_THINK_TIME_SECONDS: {{ .Values.scenarios.authLogin.thinkTimeSeconds | quote }}
+  LOADTEST_AUTH_LOGIN_THRESHOLD_HTTP_REQ_FAILED_RATE: {{ .Values.scenarios.authLogin.thresholds.httpReqFailedRate | quote }}
+  LOADTEST_AUTH_LOGIN_THRESHOLD_HTTP_REQ_DURATION_P95_MS: {{ .Values.scenarios.authLogin.thresholds.httpReqDurationP95Ms | quote }}
+  LOADTEST_AUTH_LOGIN_THRESHOLD_HTTP_REQ_DURATION_P99_MS: {{ .Values.scenarios.authLogin.thresholds.httpReqDurationP99Ms | quote }}
+  LOADTEST_AUTH_LOGIN_THRESHOLD_CHECKS_RATE: {{ .Values.scenarios.authLogin.thresholds.checksRate | quote }}
+  LOADTEST_AUTH_LOGIN_THRESHOLD_SUCCESS_RATE: {{ .Values.scenarios.authLogin.thresholds.successRate | quote }}
   LOADTEST_RESERVATION_JOURNEY_REQUEST_PREFIX: {{ .Values.scenarios.reservationJourney.requestPrefix | quote }}
   LOADTEST_RESERVATION_JOURNEY_TIMEOUT_SECONDS: {{ .Values.scenarios.reservationJourney.timeoutSeconds | quote }}
   LOADTEST_RESERVATION_JOURNEY_EXECUTOR: {{ .Values.scenarios.reservationJourney.executor | quote }}

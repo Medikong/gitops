@@ -101,6 +101,7 @@ export function experimentConditionFields(config, phase) {
     threshold_http_req_duration_p95_ms: thresholds.httpReqDurationP95Ms,
     threshold_http_req_duration_p99_ms: thresholds.httpReqDurationP99Ms,
     threshold_checks_rate: thresholds.checksRate,
+    threshold_auth_login_success_rate: thresholds.authLoginSuccessRate,
     threshold_reservation_journey_success_rate: thresholds.reservationJourneySuccessRate,
     threshold_reservation_conflict_rate: thresholds.reservationConflictRate,
     threshold_ticket_issued_rate: thresholds.ticketIssuedRate,
@@ -181,6 +182,19 @@ export function logRunFailed(config, step, error, state = {}) {
   });
 }
 
+export function logAuthLoginAccountPoolPrepared(config, state = {}) {
+  emit('loadtest_auth_login_account_pool_prepared', {
+    loadtest_run_id: config.runId,
+    scenario: config.scenario,
+    target: config.target,
+    target_base_url: config.baseUrl,
+    customer_pool_size: config.customerPool.size,
+    created_customers: state.createdCustomers || 0,
+    reused_customers: state.reusedCustomers || 0,
+    verified_customers: state.verifiedCustomers || 0,
+  });
+}
+
 export function logJourneyStep(config, step, outcome, state = {}) {
   emit('loadtest_journey_step', {
     loadtest_run_id: config.runId,
@@ -233,6 +247,14 @@ function metricValue(metrics, name, key) {
   return metric.values[key] === undefined ? null : metric.values[key];
 }
 
+function metricNameForSummary(config, name) {
+  return config.summaryStep ? `${name}{step:${config.summaryStep}}` : name;
+}
+
+function summaryMetricValue(config, metrics, name, key) {
+  return metricValue(metrics, metricNameForSummary(config, name), key);
+}
+
 export function summaryLine(config, data) {
   const metrics = data.metrics || {};
   return JSON.stringify({
@@ -242,12 +264,13 @@ export function summaryLine(config, data) {
     loadtest_run_id: config.runId || __ENV.LOADTEST_RUN_ID || null,
     scenario: config.scenario || __ENV.LOADTEST_SCENARIO || 'read-api-baseline',
     target: config.target || __ENV.LOADTEST_TARGET || 'local',
-    http_req_duration_p95_ms: metricValue(metrics, 'http_req_duration', 'p(95)'),
-    http_req_duration_p99_ms: metricValue(metrics, 'http_req_duration', 'p(99)'),
-    http_req_failed_rate: metricValue(metrics, 'http_req_failed', 'rate'),
-    http_reqs_rate: metricValue(metrics, 'http_reqs', 'rate'),
-    http_reqs_count: metricValue(metrics, 'http_reqs', 'count'),
-    checks_rate: metricValue(metrics, 'checks', 'rate'),
+    summary_step: config.summaryStep,
+    http_req_duration_p95_ms: summaryMetricValue(config, metrics, 'http_req_duration', 'p(95)'),
+    http_req_duration_p99_ms: summaryMetricValue(config, metrics, 'http_req_duration', 'p(99)'),
+    http_req_failed_rate: summaryMetricValue(config, metrics, 'http_req_failed', 'rate'),
+    http_reqs_rate: summaryMetricValue(config, metrics, 'http_reqs', 'rate'),
+    http_reqs_count: summaryMetricValue(config, metrics, 'http_reqs', 'count'),
+    checks_rate: summaryMetricValue(config, metrics, 'checks', 'rate'),
     iterations: metricValue(metrics, 'iterations', 'count'),
     vus_max: metricValue(metrics, 'vus_max', 'value'),
   });

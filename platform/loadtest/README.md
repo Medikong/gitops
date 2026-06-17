@@ -41,6 +41,17 @@ measure: GET /tickets/me?limit=...&cursor=...
 단계별 latency는 본 실행 step tag가 붙은 `http_req_duration`으로 보고, setup/pre-login은 step-level threshold와 `loadtest_api_summary` 대상에서 제외한다.
 예매 성공률, 409 비율, 티켓 발급률은 custom metric threshold로 본다.
 
+`auth-login-load-test`는 `/auth/login` 병목만 분리해서 보는 시나리오다.
+실행 전 setup 단계에서 customer pool을 `POST /auth/signup`으로 만들거나 409 재사용을 허용한 뒤 login으로 검증한다.
+측정 구간의 반복 루프는 `POST /auth/login`만 호출하고, step-level `loadtest_api_summary`에는 `auth_login.login` 결과만 남긴다.
+email, password, token 값은 JSON 로그나 metric tag에 남기지 않고, 계정 pool 식별은 revision과 count 조건으로만 관리한다.
+기본 scenario values는 빠른 임계점 탐색용으로 30초 단위 3단계 ramp-up을 사용한다.
+
+```text
+setup: POST /auth/signup 또는 POST /auth/login 검증
+measure: POST /auth/login, 30s@60/s -> 30s@90/s -> 30s@120/s
+```
+
 `setup-read-dataset`은 부하테스트용 fake read dataset을 준비한다.
 이 시나리오는 provider/admin write API를 사용하므로 read baseline 결과와 섞지 않는다.
 생성 대상은 `dataset.profile`, `dataset.revision`, 수량 값으로 조절한다.
@@ -93,6 +104,7 @@ lib/config/scenarios/read-api-baseline.js
 lib/config/scenarios/reservation-journey.js
 values/scenarios/setup-read-dataset.yaml
 values/scenarios/read-api-baseline.yaml
+values/scenarios/auth-login-load-test.yaml
 values/scenarios/reservation-journey-load-test.yaml
 values/scenarios/reservation-journey-mau10k-normal-peak.yaml
 values/scenarios/reservation-journey-mau10k-ticket-open.yaml
@@ -101,6 +113,7 @@ values/scenarios/reservation-journey-stress-find-limit.yaml
 ```
 
 조회 기준선의 VU, duration, stages, read limit, threshold는 `scenarios.readApiBaseline`에서만 조절한다.
+auth login의 executor, rate, VU 한도, duration, stages, threshold는 `scenarios.authLogin`에서만 조절한다.
 예매 여정의 executor, rate, VU 한도, duration, stages, polling, ticket list page 범위, active customer 수, 결제 금액, 좌석 재시도, threshold는 `scenarios.reservationJourney`에서만 조절한다.
 dataset setup 조건은 `dataset` 아래에 두고, fresh pool은 `dataset.revision` 또는 `dataset.customerPool.revision`으로 분리한다.
 `trafficModel`은 실행값을 만든 사업/트래픽 가정을 기록한다. k6 실행은 `scenarios.reservationJourney` 값을 사용하고, `trafficModel`은 `loadtest_experiment_conditions`에 함께 남겨 나중에 같은 프리셋끼리 비교한다.
@@ -167,6 +180,7 @@ Kong rate limit을 포함한 제품 경로 기준선을 보려면 `LOADTEST_DISA
 
 ```bash
 SCENARIO=read-api-baseline task --dir gitops dev:loadtest
+SCENARIO=auth-login-load-test task --dir gitops dev:loadtest
 SCENARIO=reservation-journey-load-test task --dir gitops dev:loadtest
 PRESET=mau10k-ticket-open task --dir gitops dev:loadtest
 LOADTEST_DISABLE_KONG_RATE_LIMIT=false SCENARIO=reservation-journey-load-test task --dir gitops dev:loadtest
@@ -174,10 +188,13 @@ LOADTEST_DISABLE_KONG_RATE_LIMIT=false SCENARIO=reservation-journey-load-test ta
 task --dir gitops/platform/loadtest lint
 task --dir gitops/platform/loadtest render
 LOADTEST_VALUES_FILE=values/aws-dev.yaml task --dir gitops/platform/loadtest render
+LOADTEST_SCENARIO_VALUES_FILE=values/scenarios/auth-login-load-test.yaml task --dir gitops/platform/loadtest render
 LOADTEST_SCENARIO_VALUES_FILE=values/scenarios/reservation-journey-load-test.yaml task --dir gitops/platform/loadtest render
 PRESET=mau10k-ticket-open task --dir gitops/platform/loadtest render
 task --dir gitops/platform/loadtest local-report LOADTEST_BASE_URL=http://localhost LOADTEST_VUS=5 LOADTEST_DURATION=1m
+SCENARIO=auth-login-load-test task --dir gitops/platform/loadtest local-report
 task --dir gitops/platform/loadtest local-report-smoke
+SCENARIO=auth-login-load-test task --dir gitops/platform/loadtest run-local
 SCENARIO=reservation-journey-load-test task --dir gitops/platform/loadtest run-local
 PRESET=mau10k-ticket-open task --dir gitops/platform/loadtest run-local
 LOADTEST_DISABLE_KONG_RATE_LIMIT=false SCENARIO=reservation-journey-load-test task --dir gitops/platform/loadtest run-local

@@ -154,6 +154,32 @@ scenarios:
       httpReqDurationP95Ms: "500"
       httpReqDurationP99Ms: "1000"
       checksRate: "0.99"
+  authLogin:
+    requestPrefix: loadtest-auth-login
+    timeoutSeconds: 10
+    setupTimeout: 10m
+    executor: ramping-vus
+    vus: 5
+    rate: 1
+    timeUnit: 1s
+    preAllocatedVUs: 10
+    maxVUs: 20
+    duration: 2m
+    stages:
+      - duration: 1m
+        target: 1
+      - duration: 1m
+        target: 3
+      - duration: 1m
+        target: 5
+    gracefulStop: 30s
+    thinkTimeSeconds: 0
+    thresholds:
+      httpReqFailedRate: "0.01"
+      httpReqDurationP95Ms: "500"
+      httpReqDurationP99Ms: "1000"
+      checksRate: "0.99"
+      successRate: "0.99"
   reservationJourney:
     requestPrefix: loadtest-reservation
     timeoutSeconds: 10

@@ -1,5 +1,6 @@
 import { getCommonConfig } from './config/common.js';
 import { getDatasetConfig } from './config/dataset.js';
+import { getAuthLoginConfig } from './config/scenarios/auth-login.js';
 import { getReadApiBaselineConfig } from './config/scenarios/read-api-baseline.js';
 import { getReservationJourneyConfig } from './config/scenarios/reservation-journey.js';
 
@@ -12,6 +13,9 @@ function scenarioConfig(scenario) {
   }
   if (scenario === 'reservation-journey-load-test') {
     return getReservationJourneyConfig();
+  }
+  if (scenario === 'auth-login-load-test') {
+    return getAuthLoginConfig();
   }
   throw new Error(`unsupported LOADTEST_SCENARIO=${scenario}`);
 }

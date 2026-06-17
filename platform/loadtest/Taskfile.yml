@@ -151,6 +151,12 @@ tasks:
             export LOADTEST_RESERVATION_JOURNEY_VUS="${LOADTEST_RESERVATION_JOURNEY_VUS:-${vus}}"
             export LOADTEST_RESERVATION_JOURNEY_DURATION="${LOADTEST_RESERVATION_JOURNEY_DURATION:-${duration}}"
             ;;
+          auth-login-load-test)
+            export LOADTEST_AUTH_LOGIN_EXECUTOR="${LOADTEST_AUTH_LOGIN_EXECUTOR:-constant-vus}"
+            export LOADTEST_AUTH_LOGIN_VUS="${LOADTEST_AUTH_LOGIN_VUS:-${vus}}"
+            export LOADTEST_AUTH_LOGIN_DURATION="${LOADTEST_AUTH_LOGIN_DURATION:-${duration}}"
+            export LOADTEST_CUSTOMER_POOL_SIZE="${LOADTEST_CUSTOMER_POOL_SIZE:-${vus}}"
+            ;;
           report-smoke)
             export LOADTEST_VUS="${vus}"
             export LOADTEST_DURATION="${duration}"
@@ -304,7 +310,9 @@ tasks:
         fi
         task secret-local
         task deploy
-        task setup-dataset
+        if [ "${scenario}" != "auth-login-load-test" ]; then
+          task setup-dataset
+        fi
         task run
 
   kong-rate-limit:disable:

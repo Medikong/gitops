@@ -9,6 +9,14 @@ function metricValue(metrics, name, key) {
   return metric.values[key];
 }
 
+function metricNameForSummary(config, name) {
+  return config.summaryStep ? metricNameWithStep(name, config.summaryStep) : name;
+}
+
+function summaryMetricValue(config, metrics, name, key) {
+  return metricValue(metrics, metricNameForSummary(config, name), key);
+}
+
 function formatNumber(value, digits = 2) {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return 'n/a';
@@ -62,17 +70,17 @@ function reportStatus(rows) {
   return 'PASS';
 }
 
-function reportSummary(data) {
+function reportSummary(config, data) {
   const metrics = data.metrics || {};
   const thresholds = thresholdRows(data);
   return {
     status: reportStatus(thresholds),
     thresholds,
-    http_req_duration_p95_ms: metricValue(metrics, 'http_req_duration', 'p(95)'),
-    http_req_duration_p99_ms: metricValue(metrics, 'http_req_duration', 'p(99)'),
-    http_req_failed_rate: metricValue(metrics, 'http_req_failed', 'rate'),
-    checks_pass_rate: metricValue(metrics, 'checks', 'rate'),
-    http_reqs_rate: metricValue(metrics, 'http_reqs', 'rate'),
+    http_req_duration_p95_ms: summaryMetricValue(config, metrics, 'http_req_duration', 'p(95)'),
+    http_req_duration_p99_ms: summaryMetricValue(config, metrics, 'http_req_duration', 'p(99)'),
+    http_req_failed_rate: summaryMetricValue(config, metrics, 'http_req_failed', 'rate'),
+    checks_pass_rate: summaryMetricValue(config, metrics, 'checks', 'rate'),
+    http_reqs_rate: summaryMetricValue(config, metrics, 'http_reqs', 'rate'),
     iterations_count: metricValue(metrics, 'iterations', 'count'),
     iterations_rate: metricValue(metrics, 'iterations', 'rate'),
   };
@@ -160,7 +168,7 @@ function metadata(config) {
 
 function markdownReport(config, data) {
   const meta = metadata(config);
-  const result = reportSummary(data);
+  const result = reportSummary(config, data);
   const stepRows = httpStepRows(data);
   const thresholdLines = result.thresholds.length === 0
     ? ['- WARN n/a']
@@ -215,7 +223,7 @@ function escapeHtml(value) {
 
 function htmlReport(config, data) {
   const meta = metadata(config);
-  const result = reportSummary(data);
+  const result = reportSummary(config, data);
   const stepRows = httpStepRows(data);
   const stepRowsHtml = stepRows.map((row) => `<tr><td>${escapeHtml(row.step)}</td><td>${escapeHtml(row.service)}</td><td>${escapeHtml(row.route)}</td><td>${escapeHtml(formatNumber(row.http_req_duration_p95_ms))} ms</td><td>${escapeHtml(formatNumber(row.http_req_duration_p99_ms))} ms</td><td>${escapeHtml(formatRate(row.http_req_failed_rate))}</td><td>${escapeHtml(formatRate(row.checks_pass_rate))}</td><td>${escapeHtml(formatNumber(row.http_reqs_count, 0))}</td><td>${escapeHtml(formatNumber(row.http_reqs_rate))}</td></tr>`).join('');
   const thresholdRowsHtml = result.thresholds.map((row) => {
@@ -301,7 +309,7 @@ function runReportLine(config, result, stepRows) {
 }
 
 export function summaryOutput(config, data) {
-  const result = reportSummary(data);
+  const result = reportSummary(config, data);
   const stepRows = httpStepRows(data);
   const stdoutLines = [
     runReportLine(config, result, stepRows),

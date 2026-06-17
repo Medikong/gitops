@@ -52,6 +52,24 @@ scenarios:
       httpReqDurationP95Ms: "500"
       httpReqDurationP99Ms: "1000"
       checksRate: "0.99"
+  authLogin:
+    executor: ramping-vus
+    vus: 1
+    rate: 1
+    timeUnit: 1s
+    preAllocatedVUs: 5
+    maxVUs: 10
+    duration: 30s
+    stages:
+      - duration: 30s
+        target: 1
+    thinkTimeSeconds: 0
+    thresholds:
+      httpReqFailedRate: "0.01"
+      httpReqDurationP95Ms: "500"
+      httpReqDurationP99Ms: "1000"
+      checksRate: "0.99"
+      successRate: "0.99"
   reservationJourney:
     executor: ramping-vus
     vus: 1
