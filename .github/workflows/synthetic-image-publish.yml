@@ -178,7 +178,7 @@ jobs:
       - name: Docker QEMU 설정
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: arm64,amd64
+          platforms: linux/arm64,linux/amd64
 
       - name: Docker Buildx 설정
         uses: docker/setup-buildx-action@v3
