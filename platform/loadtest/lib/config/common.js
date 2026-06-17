@@ -1,4 +1,4 @@
-import { optional, required } from './env.js';
+import { optional, parseStringArray, required } from './env.js';
 
 function baseUrlForTarget(target) {
   if (target === 'local') {
@@ -16,6 +16,16 @@ export function getCommonConfig() {
   const environment = optional('LOADTEST_ENVIRONMENT', target);
   const runId = optional('LOADTEST_RUN_ID', `${Date.now()}`);
   const imageTag = optional('LOADTEST_IMAGE_TAG', 'unknown');
+  const k6Output = optional('K6_OUTPUT');
+  const k6ExtraArgs = parseStringArray('LOADTEST_K6_EXTRA_ARGS');
+  const k6ScenarioFile = `/loadtest/scenarios/${scenario}.js`;
+  const k6CommandArgs = [
+    'run',
+    '--log-format=raw',
+    ...(k6Output ? ['--out', k6Output] : []),
+    ...k6ExtraArgs,
+    k6ScenarioFile,
+  ];
 
   return {
     testType: optional('LOADTEST_TEST_TYPE', 'loadtest'),
@@ -32,5 +42,10 @@ export function getCommonConfig() {
     imageTag,
     release: optional('LOADTEST_RELEASE'),
     namespace: optional('LOADTEST_NAMESPACE'),
+    k6Output,
+    k6ExtraArgs,
+    k6ScenarioFile,
+    k6Command: 'k6',
+    k6CommandArgs,
   };
 }

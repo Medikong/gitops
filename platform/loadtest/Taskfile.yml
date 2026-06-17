@@ -209,6 +209,7 @@ tasks:
   run-local:
     desc: 로컬 dev에 특정 시나리오를 배포하고 dataset setup과 loadtest를 바로 실행합니다. SCENARIO=<scenario-name>
     cmds:
+      - task: ensure-no-active-loadtest
       - |
         set -eu
         scenario="${SCENARIO:-${LOADTEST_SCENARIO:-read-api-baseline}}"
@@ -275,6 +276,7 @@ tasks:
   setup-dataset:
     desc: 배포된 dataset CronJob template에서 로컬 수동 Job을 1회 생성하고 완료를 기다립니다.
     cmds:
+      - task: ensure-no-active-loadtest
       - |
         set -eu
         job_name="{{.RELEASE}}-dataset-manual-$(date -u +%Y%m%d%H%M%S)"
@@ -302,6 +304,7 @@ tasks:
   run:
     desc: 배포된 loadtest CronJob template에서 수동 Job을 1회 생성하고 완료를 기다립니다.
     cmds:
+      - task: ensure-no-active-loadtest
       - |
         set -eu
         scenario="${SCENARIO:-$({{.KUBECTL}} -n {{.NAMESPACE}} get cronjob {{.RELEASE}} -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].env[?(@.name=="LOADTEST_SCENARIO")].value}' 2>/dev/null || true)}"
@@ -332,6 +335,21 @@ tasks:
           fi
           sleep 3
         done
+
+  ensure-no-active-loadtest:
+    internal: true
+    desc: 동시에 실행 중인 read API loadtest Job이 없는지 확인합니다.
+    cmds:
+      - |
+        set -eu
+        active_jobs="$({{.KUBECTL}} -n {{.NAMESPACE}} get jobs \
+          -l 'app.kubernetes.io/name=read-api-loadtest,medikong.io/scenario!=setup-read-dataset' \
+          -o jsonpath='{range .items[?(@.status.active)]}{.metadata.name}{"\n"}{end}')"
+        if [ -n "${active_jobs}" ]; then
+          printf 'Active loadtest Job already exists:\n%s\n' "${active_jobs}" >&2
+          printf 'Wait until it finishes, or delete the Job manually before starting another run.\n' >&2
+          exit 1
+        fi
 
   logs:
     desc: 최근 loadtest runner 로그를 봅니다.

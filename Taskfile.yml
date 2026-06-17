@@ -35,6 +35,9 @@ includes:
   loadtest:
     taskfile: platform/loadtest/Taskfile.yml
     dir: platform/loadtest
+  metrics-server:
+    taskfile: platform/metrics-server/Taskfile.yml
+    dir: platform/metrics-server
 
 tasks:
   default:
@@ -64,6 +67,7 @@ tasks:
     desc: Prometheus/Grafana, Tempo/Loki, 로컬 dev 대상 서비스 Helm release를 Docker Desktop Kubernetes에 배포합니다.
     cmds:
       - task: dev:check
+      - task: metrics-server:up
       - task --taskfile platform/monitoring/Taskfile.yml up
       - task: dev:observability
       - task: dev:platform
@@ -1021,6 +1025,7 @@ tasks:
         done
       - task: observability:down
       - task --taskfile platform/monitoring/Taskfile.yml down
+      - task: metrics-server:down
       - task: dev:kong:down
       - |
         set -eu
@@ -1235,6 +1240,7 @@ tasks:
       - '{{.KUBECTL}} kustomize platform/policies >/dev/null'
       - '{{.KUBECTL}} kustomize platform/synthetic-credentials >/dev/null'
       - task istio:render
+      - task: metrics-server:render
 
   argo:validate:
     cmds:

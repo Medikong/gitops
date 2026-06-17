@@ -27,12 +27,12 @@ const reservationConflictRate = new Rate('loadtest_reservation_conflict_rate');
 const ticketIssuedRate = new Rate('loadtest_ticket_issued_rate');
 
 function iterationConfig() {
-  const runId = `${Date.now()}-${__VU}-${__ITER}`;
+  const iterationId = `${Date.now()}-${__VU}-${__ITER}`;
   const customerIndex = customerPoolIndexForIteration(config, __VU, __ITER);
   return {
     ...config,
-    runId,
-    requestIdBase: `${config.requestPrefix}-${config.scenario}-${runId}`,
+    iterationId,
+    requestIdBase: `${config.requestPrefix}-${config.scenario}-${iterationId}`,
     customer: {
       ...customerPoolAccount(config, customerIndex),
       index: customerIndex,

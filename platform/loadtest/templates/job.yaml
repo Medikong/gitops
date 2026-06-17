@@ -44,6 +44,7 @@ spec:
       labels:
 {{ include "read-api-loadtest.labelsForScenario" (dict "root" . "scenario" .Values.loadtest.scenario) | indent 8 }}
         app.kubernetes.io/component: k6-runner
+        medikong.io/phase: loadtest
         medikong.io/execution: gitops-manual
     spec:
 {{ include "read-api-loadtest.podSpec" (dict "root" . "scenario" .Values.loadtest.scenario "credentialsSecretName" .Values.loadtest.credentialsSecretName) | indent 6 }}

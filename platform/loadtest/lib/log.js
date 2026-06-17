@@ -12,6 +12,9 @@ function compact(fields) {
 }
 
 function datasetShape(config) {
+  if (!config.dataset || !config.customerPool) {
+    return {};
+  }
   const seatsPerPerformance = (
     config.dataset.seatSections
     * config.dataset.seatRows
@@ -39,8 +42,9 @@ function datasetShape(config) {
   };
 }
 
-export function logExperimentConditions(config, phase) {
-  emit('loadtest_experiment_conditions', compact({
+export function experimentConditionFields(config, phase) {
+  const thresholds = config.thresholds || {};
+  return compact({
     loadtest_run_id: config.runId,
     phase,
     scenario: config.scenario,
@@ -52,6 +56,11 @@ export function logExperimentConditions(config, phase) {
     image_tag: config.imageTag,
     release: config.release,
     namespace: config.namespace,
+    k6_command: config.k6Command,
+    k6_command_args: config.k6CommandArgs,
+    k6_extra_args: config.k6ExtraArgs,
+    k6_output: config.k6Output,
+    k6_scenario_file: config.k6ScenarioFile,
     executor: config.executor,
     vus: config.vus,
     rate: config.rate,
@@ -69,21 +78,26 @@ export function logExperimentConditions(config, phase) {
     concert_limit: config.concertLimit,
     performance_limit: config.performanceLimit,
     seat_limit: config.seatLimit,
-    threshold_http_req_failed_rate: config.thresholds.httpReqFailedRate,
-    threshold_http_req_duration_p95_ms: config.thresholds.httpReqDurationP95Ms,
-    threshold_http_req_duration_p99_ms: config.thresholds.httpReqDurationP99Ms,
-    threshold_checks_rate: config.thresholds.checksRate,
-    threshold_reservation_journey_success_rate: config.thresholds.reservationJourneySuccessRate,
-    threshold_reservation_conflict_rate: config.thresholds.reservationConflictRate,
-    threshold_ticket_issued_rate: config.thresholds.ticketIssuedRate,
+    threshold_http_req_failed_rate: thresholds.httpReqFailedRate,
+    threshold_http_req_duration_p95_ms: thresholds.httpReqDurationP95Ms,
+    threshold_http_req_duration_p99_ms: thresholds.httpReqDurationP99Ms,
+    threshold_checks_rate: thresholds.checksRate,
+    threshold_reservation_journey_success_rate: thresholds.reservationJourneySuccessRate,
+    threshold_reservation_conflict_rate: thresholds.reservationConflictRate,
+    threshold_ticket_issued_rate: thresholds.ticketIssuedRate,
     measurement_window_source: 'grafana_time_range',
     ...datasetShape(config),
-  }));
+  });
+}
+
+export function logExperimentConditions(config, phase) {
+  emit('loadtest_experiment_conditions', experimentConditionFields(config, phase));
 }
 
 export function logRunStarted(config) {
   emit('loadtest_run_started', {
     loadtest_run_id: config.runId,
+    iteration_id: config.iterationId,
     scenario: config.scenario,
     target: config.target,
     target_base_url: config.baseUrl,
@@ -98,6 +112,7 @@ export function logRunStarted(config) {
 export function logStep(config, step, response, extra = {}) {
   emit('loadtest_step', {
     loadtest_run_id: config.runId,
+    iteration_id: config.iterationId,
     scenario: config.scenario,
     step,
     target: config.target,
@@ -111,6 +126,7 @@ export function logStep(config, step, response, extra = {}) {
 export function logRunFinished(config, state = {}) {
   emit('loadtest_run_finished', {
     loadtest_run_id: config.runId,
+    iteration_id: config.iterationId,
     scenario: config.scenario,
     target: config.target,
     target_base_url: config.baseUrl,
@@ -128,6 +144,7 @@ export function logRunFinished(config, state = {}) {
 export function logRunFailed(config, step, error, state = {}) {
   emit('loadtest_run_failed', {
     loadtest_run_id: config.runId,
+    iteration_id: config.iterationId,
     scenario: config.scenario,
     step,
     target: config.target,
@@ -147,6 +164,7 @@ export function logRunFailed(config, step, error, state = {}) {
 export function logJourneyStep(config, step, outcome, state = {}) {
   emit('loadtest_journey_step', {
     loadtest_run_id: config.runId,
+    iteration_id: config.iterationId,
     scenario: config.scenario,
     step,
     outcome,
@@ -195,19 +213,20 @@ function metricValue(metrics, name, key) {
   return metric.values[key] === undefined ? null : metric.values[key];
 }
 
-export function summaryLine(data) {
+export function summaryLine(config, data) {
   const metrics = data.metrics || {};
   return JSON.stringify({
     event: 'loadtest_summary',
     timestamp: new Date().toISOString(),
     test_type: 'loadtest',
-    loadtest_run_id: __ENV.LOADTEST_RUN_ID || null,
-    scenario: __ENV.LOADTEST_SCENARIO || 'read-api-baseline',
-    target: __ENV.LOADTEST_TARGET || 'local',
+    loadtest_run_id: config.runId || __ENV.LOADTEST_RUN_ID || null,
+    scenario: config.scenario || __ENV.LOADTEST_SCENARIO || 'read-api-baseline',
+    target: config.target || __ENV.LOADTEST_TARGET || 'local',
     http_req_duration_p95_ms: metricValue(metrics, 'http_req_duration', 'p(95)'),
     http_req_duration_p99_ms: metricValue(metrics, 'http_req_duration', 'p(99)'),
     http_req_failed_rate: metricValue(metrics, 'http_req_failed', 'rate'),
     http_reqs_rate: metricValue(metrics, 'http_reqs', 'rate'),
+    http_reqs_count: metricValue(metrics, 'http_reqs', 'count'),
     checks_rate: metricValue(metrics, 'checks', 'rate'),
     iterations: metricValue(metrics, 'iterations', 'count'),
     vus_max: metricValue(metrics, 'vus_max', 'value'),

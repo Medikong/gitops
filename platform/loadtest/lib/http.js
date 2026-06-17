@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check, fail } from 'k6';
 
-import { routeLabel } from './http-metrics.js';
+import { routeLabel, serviceLabel } from './http-metrics.js';
 import { logStep } from './log.js';
 
 function encodeQuery(params) {
@@ -25,14 +25,13 @@ export function authHeaders(token) {
 export function requestJson(config, step, method, path, body = null, extraHeaders = {}, query = {}) {
   const url = `${config.baseUrl}${path}${encodeQuery(query)}`;
   const route = routeLabel(step, method, path);
-  const requestId = `${config.requestIdBase}-${step.replace(/[^a-zA-Z0-9]/g, '-')}`;
+  const service = serviceLabel(step);
   const payload = body === null || body === undefined ? null : JSON.stringify(body);
   const response = http.request(method, url, payload, {
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
       'X-Loadtest-Traffic': 'true',
-      'X-Request-Id': requestId,
       ...extraHeaders,
     },
     timeout: `${config.timeoutSeconds}s`,
@@ -42,12 +41,13 @@ export function requestJson(config, step, method, path, body = null, extraHeader
       test_type: config.testType,
       name: route,
       route,
+      service,
       step,
       target: config.target,
     },
   });
 
-  logStep(config, step, response);
+  logStep(config, step, response, { route, service });
   const ok = check(response, {
     [`${step} returned 2xx`]: (res) => res.status >= 200 && res.status < 300,
     [`${step} returned json`]: (res) => String(res.headers['Content-Type'] || res.headers['content-type'] || '').includes('application/json'),
@@ -56,6 +56,7 @@ export function requestJson(config, step, method, path, body = null, extraHeader
     profile: config.dataset.profile,
     test_type: config.testType,
     route,
+    service,
     step,
     target: config.target,
   });
@@ -73,14 +74,13 @@ export function requestJson(config, step, method, path, body = null, extraHeader
 export function requestWithExpectedStatuses(config, step, method, path, body = null, extraHeaders = {}, query = {}, expectedStatuses = []) {
   const url = `${config.baseUrl}${path}${encodeQuery(query)}`;
   const route = routeLabel(step, method, path);
-  const requestId = `${config.requestIdBase}-${step.replace(/[^a-zA-Z0-9]/g, '-')}`;
+  const service = serviceLabel(step);
   const payload = body === null || body === undefined ? null : JSON.stringify(body);
   const response = http.request(method, url, payload, {
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
       'X-Loadtest-Traffic': 'true',
-      'X-Request-Id': requestId,
       ...extraHeaders,
     },
     timeout: `${config.timeoutSeconds}s`,
@@ -91,12 +91,13 @@ export function requestWithExpectedStatuses(config, step, method, path, body = n
       test_type: config.testType,
       name: route,
       route,
+      service,
       step,
       target: config.target,
     },
   });
 
-  logStep(config, step, response);
+  logStep(config, step, response, { route, service });
   const ok = check(response, {
     [`${step} returned expected status`]: (res) => expectedStatuses.includes(res.status),
   }, {
@@ -104,6 +105,7 @@ export function requestWithExpectedStatuses(config, step, method, path, body = n
     profile: config.dataset.profile,
     test_type: config.testType,
     route,
+    service,
     step,
     target: config.target,
   });

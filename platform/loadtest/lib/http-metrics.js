@@ -1,17 +1,25 @@
-export const HTTP_STEP_ROUTES = {
-  'read_api.concerts': 'GET /concerts',
-  'read_api.performances': 'GET /concerts/{id}/performances',
-  'read_api.seats': 'GET /performances/{id}/seats',
-  'dataset.customer.signup': 'POST /auth/signup',
-  'dataset.customer.login_verify': 'POST /auth/login',
-  'reservation_journey.auth.login': 'POST /auth/login',
-  'reservation_journey.concerts': 'GET /concerts',
-  'reservation_journey.performances': 'GET /concerts/{id}/performances',
-  'reservation_journey.seats': 'GET /performances/{id}/seats',
-  'reservation_journey.reservation.create': 'POST /reservations',
-  'reservation_journey.payment.approve': 'POST /payments',
-  'reservation_journey.ticket.list': 'GET /tickets/me',
+export const HTTP_STEP_METADATA = {
+  'read_api.concerts': { route: 'GET /concerts', service: 'concert-service' },
+  'read_api.performances': { route: 'GET /concerts/{id}/performances', service: 'concert-service' },
+  'read_api.seats': { route: 'GET /performances/{id}/seats', service: 'concert-service' },
+  'dataset.customer.signup': { route: 'POST /auth/signup', service: 'auth-service' },
+  'dataset.customer.login_verify': { route: 'POST /auth/login', service: 'auth-service' },
+  'reservation_journey.auth.login': { route: 'POST /auth/login', service: 'auth-service' },
+  'reservation_journey.concerts': { route: 'GET /concerts', service: 'concert-service' },
+  'reservation_journey.performances': { route: 'GET /concerts/{id}/performances', service: 'concert-service' },
+  'reservation_journey.seats': { route: 'GET /performances/{id}/seats', service: 'concert-service' },
+  'reservation_journey.reservation.create': { route: 'POST /reservations', service: 'reservation-service' },
+  'reservation_journey.payment.approve': { route: 'POST /payments', service: 'payment-service' },
+  'reservation_journey.ticket.list': { route: 'GET /tickets/me', service: 'ticket-service' },
 };
+
+export const HTTP_STEP_ROUTES = Object.fromEntries(
+  Object.entries(HTTP_STEP_METADATA).map(([step, metadata]) => [step, metadata.route]),
+);
+
+export const HTTP_STEP_SERVICES = Object.fromEntries(
+  Object.entries(HTTP_STEP_METADATA).map(([step, metadata]) => [step, metadata.service]),
+);
 
 export const READ_API_STEPS = [
   'read_api.concerts',
@@ -31,6 +39,10 @@ export const RESERVATION_JOURNEY_STEPS = [
 
 export function routeLabel(step, method, path) {
   return HTTP_STEP_ROUTES[step] || `${method} ${step || path}`;
+}
+
+export function serviceLabel(step) {
+  return HTTP_STEP_SERVICES[step] || 'unknown';
 }
 
 export function httpStepThresholds(steps, thresholds) {

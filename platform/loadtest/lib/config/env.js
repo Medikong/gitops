@@ -80,3 +80,22 @@ export function parseStages(name) {
     return { duration, target };
   });
 }
+
+export function parseStringArray(name) {
+  const raw = optional(name, '[]');
+  let values;
+  try {
+    values = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`${name} must be a JSON array: ${error.message}`);
+  }
+  if (!Array.isArray(values)) {
+    throw new Error(`${name} must be a JSON array`);
+  }
+  return values.map((value, index) => {
+    if (typeof value !== 'string') {
+      throw new Error(`${name}[${index}] must be a string`);
+    }
+    return value;
+  });
+}

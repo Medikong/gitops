@@ -23,6 +23,12 @@ container:
       cpu: 500m
       memory: 512Mi
 
+database:
+  sqlalchemy:
+    poolSize: 15
+    maxOverflow: 5
+    poolTimeoutSeconds: 10
+
 observability:
   tracing:
     enabled: true
@@ -31,7 +37,7 @@ observability:
   profiling:
     enabled: true
     serverAddress: http://pyroscope.observability.svc.cluster.local:4040
-    sampleRate: 25
+    sampleRate: 100
     spanProfilesEnabled: true
 
 pdb:

@@ -43,9 +43,10 @@ export function loginCustomer(config, account) {
 }
 
 export function selectReservationTarget(config, attempt = 0) {
+  const selectionId = config.iterationId || config.runId;
   const concertsBody = getJson(config, 'reservation_journey.concerts', '/concerts', { limit: config.concertLimit });
   const concerts = datasetConcerts(config, itemsFrom(concertsBody, 'reservation_journey.concerts'));
-  const concert = pickByRunId(concerts, 'reservation_journey.concerts', `${config.runId}:concert`, attempt);
+  const concert = pickByRunId(concerts, 'reservation_journey.concerts', `${selectionId}:concert`, attempt);
   const concertId = requireField(concert, 'id', 'reservation_journey.concerts');
 
   const performancesBody = getJson(
@@ -55,7 +56,7 @@ export function selectReservationTarget(config, attempt = 0) {
     { limit: config.performanceLimit },
   );
   const performances = itemsFrom(performancesBody, 'reservation_journey.performances');
-  const performance = pickByRunId(performances, 'reservation_journey.performances', `${config.runId}:performance`, attempt);
+  const performance = pickByRunId(performances, 'reservation_journey.performances', `${selectionId}:performance`, attempt);
   const performanceId = requireField(performance, 'id', 'reservation_journey.performances');
 
   const seatsBody = getJson(
@@ -65,7 +66,7 @@ export function selectReservationTarget(config, attempt = 0) {
     { limit: config.seatLimit },
   );
   const seats = availableSeats(itemsFrom(seatsBody, 'reservation_journey.seats'));
-  const seat = pickByRunId(seats, 'reservation_journey.seats', `${config.runId}:seat`, attempt);
+  const seat = pickByRunId(seats, 'reservation_journey.seats', `${selectionId}:seat`, attempt);
 
   return {
     concertId,

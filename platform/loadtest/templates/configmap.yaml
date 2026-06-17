@@ -84,4 +84,5 @@ data:
   LOADTEST_DATASET_STARTS_AT_SPACING_MINUTES: {{ .Values.dataset.startsAtSpacingMinutes | quote }}
   LOADTEST_DATASET_DISCOVERY_LIMIT: {{ .Values.dataset.discoveryLimit | quote }}
   LOADTEST_DATASET_CREATE_PAUSE_SECONDS: {{ .Values.dataset.createPauseSeconds | quote }}
+  LOADTEST_K6_EXTRA_ARGS: {{ toJson .Values.k6.extraArgs | quote }}
   K6_OUTPUT: {{ .Values.k6.output | quote }}

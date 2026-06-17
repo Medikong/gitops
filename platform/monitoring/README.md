@@ -170,7 +170,7 @@ Load dashboard 확인 순서:
 Load 50 - Service Resource and Traffic
   auth/concert/notification/payment/reservation/ticket의 CPU, memory, RPS, p95 latency를 2열 큰 그래프로 비교한다.
 Load 60 - k6 Runner Execution
-  k6 runner CPU/memory, Job 실패 수, 실험 조건, 실행 시작/종료/실패/summary 로그를 보고 부하테스트가 정상 실행됐는지 확인한다.
+  특정 loadtest_run_id를 골라 runner stdout JSON으로 수집된 실험 조건, 전체 summary, API/step별 p95/p99/error/RPS/request count, 실패 로그를 한 화면에서 본다.
 ```
 
 `Load 40 - Cause Candidates`는 원인을 확정하는 화면이 아니다. 아직 metric 계약이 없는 connection pool wait, queue depth, consumer lag 같은 항목은 readiness/stat/table 패널로 먼저 드러내며, 없는 신호를 억지 PromQL로 정상처럼 보이게 만들지 않는다. 값이 비어 있으면 해당 metric 수집 계약이나 exporter 배포가 먼저 필요하다.

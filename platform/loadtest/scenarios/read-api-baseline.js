@@ -17,11 +17,11 @@ const config = getConfig();
 const readIterationSuccess = new Rate('loadtest_read_iteration_success');
 
 function iterationConfig() {
-  const runId = `${Date.now()}-${__VU}-${__ITER}`;
+  const iterationId = `${Date.now()}-${__VU}-${__ITER}`;
   return {
     ...config,
-    runId,
-    requestIdBase: `${config.requestPrefix}-${config.scenario}-${runId}`,
+    iterationId,
+    requestIdBase: `${config.requestPrefix}-${config.scenario}-${iterationId}`,
   };
 }
 
