@@ -89,6 +89,23 @@ setup: POST /auth/signup 또는 POST /auth/login 검증
 measure: POST /auth/login, 30s@60/s -> 30s@90/s -> 30s@120/s
 ```
 
+`ticket-service-read-load-test`는 ticket-service read path만 분리해서 보는 시나리오다.
+reservation journey 전체 병목을 다시 재는 시나리오가 아니며, 예매/결제/티켓 발급 write flow를 측정 구간에 섞지 않는다.
+setup 단계에서 run id 기반 customer pool을 만들고 `/tickets/issue`로 customer별 ticket 목록을 준비한 뒤, 측정 구간에서는 `/tickets/me`만 호출한다.
+setup에서 쓰는 email/password/raw token은 JSON 로그나 metric tag에 남기지 않고, 동적 reservation/ticket id는 JSON 로그 field에만 남긴다.
+
+```text
+setup/account-pool: POST /auth/signup 또는 POST /auth/login 검증
+setup/ticket-dataset: POST /tickets/issue로 customer별 ticket 목록 준비
+measure: ticket-list, GET /tickets/me 첫 페이지
+measure: ticket-list-pagination, nextCursor로 여러 페이지 조회
+measure: ticket-wait-by-list, 특정 reservationId의 ticket을 목록 pagination으로 찾기
+```
+
+분석 기준은 `loadtest_api_summary`와 `loadtest_run_report.api_step_results`의 `ticket-list`, `ticket-list-pagination`, `ticket-wait-by-list` 행이다.
+각 행에서 p95/p99, error rate, `http_reqs_rate`, `rps`, request count를 비교한다.
+RPS, duration, VU, local/cluster 차이는 scenario 코드가 아니라 `values/scenarios/ticket-service-read-load-test.yaml` 또는 `values/presets/ticket-service-read/*.yaml`에서 조절한다.
+
 `setup-read-dataset`은 부하테스트용 fake read dataset을 준비한다.
 이 시나리오는 provider/admin write API를 사용하므로 read baseline 결과와 섞지 않는다.
 생성 대상은 `dataset.profile`, `dataset.revision`, 수량 값으로 조절한다.
@@ -128,6 +145,10 @@ k6 실행 로그와 `handleSummary` 결과를 stdout JSON line으로 남기고, 
 이 이벤트에는 `environment`, `target`, `target_base_url`, `scenario`, `vus`, `duration`, threshold, dataset profile/revision, 계산된 dataset 총량, runner image tag, `revision`이 들어간다.
 발표 자료나 회고에서는 Grafana time range와 이 이벤트를 함께 보고 같은 조건을 다시 재현한다.
 
+실험 결과는 `loadtest_run_report`, `loadtest_summary`, `loadtest_api_summary` JSON line으로 남긴다.
+요청 처리량은 기존 k6 이름인 `http_reqs_rate`와 사람이 읽기 쉬운 별칭인 `rps`를 함께 기록한다.
+API별 처리량 비교에서는 `loadtest_api_summary.rps`를 우선 보고, 전체 실행 처리량은 `loadtest_run_report.rps`를 본다.
+
 ## Scenario conditions
 
 실행 공통 조건과 실험 조건은 분리한다.
@@ -140,9 +161,11 @@ lib/config/dataset.js
 lib/config/scenarios/read-api-baseline.js
 lib/config/scenarios/reservation-journey.js
 lib/config/scenarios/reservation-load.js
+lib/config/scenarios/ticket-service-read.js
 values/scenarios/setup-read-dataset.yaml
 values/scenarios/read-api-baseline.yaml
 values/scenarios/auth-login-load-test.yaml
+values/scenarios/ticket-service-read-load-test.yaml
 values/scenarios/reservation-journey-load-test.yaml
 values/scenarios/reservation-create-load-test.yaml
 values/scenarios/reservation-seat-contention-load-test.yaml
@@ -150,6 +173,7 @@ values/scenarios/reservation-seat-contention-load-test.yaml
 
 조회 기준선의 VU, duration, stages, read limit, threshold는 `scenarios.readApiBaseline`에서만 조절한다.
 auth login의 executor, rate, VU 한도, duration, stages, threshold는 `scenarios.authLogin`에서만 조절한다.
+ticket-service read의 executor, rate, VU 한도, duration, ticket list limit, pagination page depth, wait target ticket position, customer별 ticket 수, active customer 수, threshold는 `scenarios.ticketServiceRead`에서만 조절한다.
 예매 여정의 executor, rate, VU 한도, duration, stages, polling, ticket list page 범위, active customer 수, 결제 금액, 좌석 재시도, threshold는 `scenarios.reservationJourney`에서만 조절한다.
 예약 생성 기준선의 executor, rate, VU 한도, duration, stages, active customer 수, 좌석 재시도, seat candidate 수, threshold는 `scenarios.reservationCreate`에서만 조절한다.
 좌석 경합의 executor, rate, VU 한도, duration, stages, active customer 수, seat candidate 수, threshold는 `scenarios.reservationSeatContention`에서만 조절한다.
@@ -164,6 +188,7 @@ dataset setup 조건은 `dataset` 아래에 두고, fresh pool은 `dataset.revis
 preset values 파일은 `values/presets/reservation-journey/` 아래에 두고, values 안의 `loadtest.scenario`는 실제 script 이름으로 고정한다.
 
 ```text
+values/presets/reservation-journey/local-ticket-open-5m.yaml
 values/presets/reservation-journey/mau10k-normal-peak.yaml
 values/presets/reservation-journey/mau10k-ticket-open.yaml
 values/presets/reservation-journey/mau10k-ticket-open-aggressive.yaml
@@ -172,11 +197,14 @@ values/presets/reservation-create/mau10k-normal-peak.yaml
 values/presets/reservation-create/mau10k-ticket-open.yaml
 values/presets/reservation-seat-contention/mau10k-ticket-open.yaml
 values/presets/reservation-seat-contention/stress-find-limit.yaml
+values/presets/ticket-service-read/local-ticket-read-smoke.yaml
 ```
 
 `mau10k-normal-peak`는 MAU 1만, DAU/MAU 20%, DAU의 30%가 피크 1시간에 분산되는 일반 피크를 가정한다.
 계산값은 약 `0.17 journey/s`이고 safety factor 3을 적용해 `0.5 journey/s`로 실행한다.
 
+`local-ticket-open-5m`은 로컬 재검증용이다.
+MAU 1만 티켓 오픈 가정을 5분 동안 `2 journey/s`로 짧게 실행해 ticket-service tail latency와 관측계 부담을 함께 확인한다.
 
 `mau10k-ticket-open`은 MAU 1만, DAU/MAU 20%, DAU의 30%가 티켓 오픈 10분 안에 몰리는 상황을 가정한다.
 계산값은 `1 journey/s`이고 safety factor 2를 적용해 `2 journey/s`로 실행한다.
@@ -225,18 +253,21 @@ Kong rate limit을 포함한 제품 경로 기준선을 보려면 `LOADTEST_DISA
 ```bash
 SCENARIO=read-api-baseline task --dir gitops dev:loadtest
 SCENARIO=auth-login-load-test task --dir gitops dev:loadtest
+SCENARIO=ticket-service-read-load-test task --dir gitops dev:loadtest
 SCENARIO=reservation-journey-load-test task --dir gitops dev:loadtest
 SCENARIO=reservation-create-load-test task --dir gitops dev:loadtest
 SCENARIO=reservation-seat-contention-load-test task --dir gitops dev:loadtest
 PRESET=mau10k-ticket-open task --dir gitops dev:loadtest
 SCENARIO=reservation-create-load-test PRESET=mau10k-ticket-open task --dir gitops dev:loadtest
 SCENARIO=reservation-seat-contention-load-test PRESET=stress-find-limit task --dir gitops dev:loadtest
+SCENARIO=ticket-service-read-load-test PRESET=local-ticket-read-smoke task --dir gitops dev:loadtest
 LOADTEST_DISABLE_KONG_RATE_LIMIT=false SCENARIO=reservation-journey-load-test task --dir gitops dev:loadtest
 
 task --dir gitops/platform/loadtest lint
 task --dir gitops/platform/loadtest render
 LOADTEST_VALUES_FILE=values/aws-dev.yaml task --dir gitops/platform/loadtest render
 LOADTEST_SCENARIO_VALUES_FILE=values/scenarios/auth-login-load-test.yaml task --dir gitops/platform/loadtest render
+LOADTEST_SCENARIO_VALUES_FILE=values/scenarios/ticket-service-read-load-test.yaml task --dir gitops/platform/loadtest render
 LOADTEST_SCENARIO_VALUES_FILE=values/scenarios/reservation-journey-load-test.yaml task --dir gitops/platform/loadtest render
 LOADTEST_SCENARIO_VALUES_FILE=values/scenarios/reservation-create-load-test.yaml task --dir gitops/platform/loadtest render
 LOADTEST_SCENARIO_VALUES_FILE=values/scenarios/reservation-seat-contention-load-test.yaml task --dir gitops/platform/loadtest render
@@ -245,14 +276,17 @@ PRESET=mau10k-normal-peak SCENARIO=reservation-create-load-test task --dir gitop
 PRESET=stress-find-limit SCENARIO=reservation-seat-contention-load-test task --dir gitops/platform/loadtest render
 task --dir gitops/platform/loadtest local-report LOADTEST_BASE_URL=http://localhost LOADTEST_VUS=5 LOADTEST_DURATION=1m
 SCENARIO=auth-login-load-test task --dir gitops/platform/loadtest local-report
+SCENARIO=ticket-service-read-load-test task --dir gitops/platform/loadtest local-report
 task --dir gitops/platform/loadtest local-report-smoke
 SCENARIO=auth-login-load-test task --dir gitops/platform/loadtest run-local
+SCENARIO=ticket-service-read-load-test task --dir gitops/platform/loadtest run-local
 SCENARIO=reservation-journey-load-test task --dir gitops/platform/loadtest run-local
 SCENARIO=reservation-create-load-test task --dir gitops/platform/loadtest run-local
 SCENARIO=reservation-seat-contention-load-test task --dir gitops/platform/loadtest run-local
 PRESET=mau10k-ticket-open task --dir gitops/platform/loadtest run-local
 SCENARIO=reservation-create-load-test PRESET=mau10k-ticket-open task --dir gitops/platform/loadtest run-local
 SCENARIO=reservation-seat-contention-load-test PRESET=stress-find-limit task --dir gitops/platform/loadtest run-local
+SCENARIO=ticket-service-read-load-test PRESET=local-ticket-read-smoke task --dir gitops/platform/loadtest run-local
 LOADTEST_DISABLE_KONG_RATE_LIMIT=false SCENARIO=reservation-journey-load-test task --dir gitops/platform/loadtest run-local
 task --dir gitops/platform/loadtest kong-rate-limit:status
 task --dir gitops/platform/loadtest kong-rate-limit:restore

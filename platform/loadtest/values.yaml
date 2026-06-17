@@ -180,6 +180,32 @@ scenarios:
       httpReqDurationP99Ms: "1000"
       checksRate: "0.99"
       successRate: "0.99"
+  ticketServiceRead:
+    requestPrefix: loadtest-ticket-read
+    timeoutSeconds: 10
+    setupTimeout: 10m
+    executor: constant-arrival-rate
+    vus: 5
+    rate: 1
+    timeUnit: 1s
+    preAllocatedVUs: 10
+    maxVUs: 20
+    duration: 2m
+    stages: []
+    gracefulStop: 30s
+    thinkTimeSeconds: 0
+    ticketListLimit: 20
+    ticketListPaginationPages: 3
+    ticketListMaxPages: 5
+    ticketsPerCustomer: 60
+    waitTargetTicketPosition: 41
+    activeCustomerCount: 20
+    thresholds:
+      httpReqFailedRate: "0.01"
+      httpReqDurationP95Ms: "500"
+      httpReqDurationP99Ms: "1000"
+      checksRate: "0.99"
+      successRate: "0.99"
   reservationJourney:
     requestPrefix: loadtest-reservation
     timeoutSeconds: 10

@@ -4,6 +4,7 @@ import { getAuthLoginConfig } from './config/scenarios/auth-login.js';
 import { getReadApiBaselineConfig } from './config/scenarios/read-api-baseline.js';
 import { getReservationCreateConfig, getReservationSeatContentionConfig } from './config/scenarios/reservation-load.js';
 import { getReservationJourneyConfig } from './config/scenarios/reservation-journey.js';
+import { getTicketServiceReadConfig } from './config/scenarios/ticket-service-read.js';
 
 function scenarioConfig(scenario) {
   if (scenario === 'setup-read-dataset') {
@@ -23,6 +24,9 @@ function scenarioConfig(scenario) {
   }
   if (scenario === 'auth-login-load-test') {
     return getAuthLoginConfig();
+  }
+  if (scenario === 'ticket-service-read-load-test') {
+    return getTicketServiceReadConfig();
   }
   throw new Error(`unsupported LOADTEST_SCENARIO=${scenario}`);
 }
@@ -44,10 +48,10 @@ export function getConfig() {
 
 export function requireCustomerPool(config) {
   if (!config.customerPool.password) {
-    throw new Error('LOADTEST_CUSTOMER_POOL_PASSWORD required for reservation journey loadtest');
+    throw new Error('LOADTEST_CUSTOMER_POOL_PASSWORD required for customer-pool loadtest');
   }
   if (config.activeCustomerCount && config.customerPool.size < config.activeCustomerCount) {
-    throw new Error('LOADTEST_CUSTOMER_POOL_SIZE must be greater than or equal to LOADTEST_RESERVATION_JOURNEY_ACTIVE_CUSTOMER_COUNT');
+    throw new Error('LOADTEST_CUSTOMER_POOL_SIZE must be greater than or equal to the scenario active customer count');
   }
 }
 

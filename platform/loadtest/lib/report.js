@@ -81,6 +81,7 @@ function reportSummary(config, data) {
     http_req_failed_rate: summaryMetricValue(config, metrics, 'http_req_failed', 'rate'),
     checks_pass_rate: summaryMetricValue(config, metrics, 'checks', 'rate'),
     http_reqs_rate: summaryMetricValue(config, metrics, 'http_reqs', 'rate'),
+    rps: summaryMetricValue(config, metrics, 'http_reqs', 'rate'),
     iterations_count: metricValue(metrics, 'iterations', 'count'),
     iterations_rate: metricValue(metrics, 'iterations', 'rate'),
   };
@@ -130,6 +131,7 @@ function httpStepRows(data) {
       checks_pass_rate: metricValue(metrics, metricNameWithStep('checks', step), 'rate'),
       http_reqs_count: metricValue(metrics, metricNameWithStep('http_reqs', step), 'count'),
       http_reqs_rate: metricValue(metrics, metricNameWithStep('http_reqs', step), 'rate'),
+      rps: metricValue(metrics, metricNameWithStep('http_reqs', step), 'rate'),
       ...reservationCreateOutcomeMetrics(metrics, step),
     }))
     .filter((row) => row.http_reqs_count > 0);
@@ -165,6 +167,7 @@ function apiStepResults(rows) {
     http_req_duration_p99_ms: row.http_req_duration_p99_ms,
     http_req_failed_rate: row.http_req_failed_rate,
     http_reqs_rate: row.http_reqs_rate,
+    rps: row.rps,
     http_reqs_count: row.http_reqs_count,
     reservation_create_201_rate: row.reservation_create_201_rate,
     reservation_create_201_count: row.reservation_create_201_count,
@@ -311,7 +314,7 @@ function htmlReport(config, data) {
 `;
 }
 
-function runReportLine(config, result, stepRows) {
+function runReportLine(config, data, result, stepRows) {
   return JSON.stringify({
     event: 'loadtest_run_report',
     timestamp: new Date().toISOString(),
@@ -326,6 +329,7 @@ function runReportLine(config, result, stepRows) {
     http_req_duration_p99_ms: result.http_req_duration_p99_ms,
     http_req_failed_rate: result.http_req_failed_rate,
     http_reqs_rate: result.http_reqs_rate,
+    rps: result.rps,
     iterations_count: result.iterations_count,
     iterations_rate: result.iterations_rate,
     reservation_handled_rate: metricValue(data.metrics || {}, 'loadtest_reservation_handled_rate', 'rate'),
@@ -340,7 +344,7 @@ export function summaryOutput(config, data) {
   const result = reportSummary(config, data);
   const stepRows = httpStepRows(data);
   const stdoutLines = [
-    runReportLine(config, result, stepRows),
+    runReportLine(config, data, result, stepRows),
     summaryLine(config, data),
     ...stepRows.map((row) => JSON.stringify({
       event: 'loadtest_api_summary',
@@ -355,6 +359,7 @@ export function summaryOutput(config, data) {
       http_req_duration_p99_ms: row.http_req_duration_p99_ms,
       http_req_failed_rate: row.http_req_failed_rate,
       http_reqs_rate: row.http_reqs_rate,
+      rps: row.rps,
       http_reqs_count: row.http_reqs_count,
       reservation_create_201_rate: row.reservation_create_201_rate,
       reservation_create_201_count: row.reservation_create_201_count,

@@ -19,6 +19,9 @@ export const HTTP_STEP_METADATA = {
   'reservation_seat_contention.performances': { route: 'GET /concerts/{id}/performances', service: 'concert-service' },
   'reservation_seat_contention.seats': { route: 'GET /performances/{id}/seats', service: 'concert-service' },
   'reservation_seat_contention.reservation.create': { route: 'POST /reservations', service: 'reservation-service' },
+  'ticket-list': { route: 'GET /tickets/me', service: 'ticket-service' },
+  'ticket-list-pagination': { route: 'GET /tickets/me', service: 'ticket-service' },
+  'ticket-wait-by-list': { route: 'GET /tickets/me', service: 'ticket-service' },
 };
 
 export const HTTP_STEP_ROUTES = Object.fromEntries(
@@ -60,6 +63,12 @@ export const RESERVATION_SEAT_CONTENTION_STEPS = [
 
 export const AUTH_LOGIN_STEPS = [
   'auth_login.login',
+];
+
+export const TICKET_SERVICE_READ_STEPS = [
+  'ticket-list',
+  'ticket-list-pagination',
+  'ticket-wait-by-list',
 ];
 
 export function routeLabel(step, method, path) {

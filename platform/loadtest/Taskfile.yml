@@ -168,6 +168,13 @@ tasks:
             export LOADTEST_AUTH_LOGIN_DURATION="${LOADTEST_AUTH_LOGIN_DURATION:-${duration}}"
             export LOADTEST_CUSTOMER_POOL_SIZE="${LOADTEST_CUSTOMER_POOL_SIZE:-${vus}}"
             ;;
+          ticket-service-read-load-test)
+            export LOADTEST_TICKET_SERVICE_READ_EXECUTOR="${LOADTEST_TICKET_SERVICE_READ_EXECUTOR:-constant-vus}"
+            export LOADTEST_TICKET_SERVICE_READ_VUS="${LOADTEST_TICKET_SERVICE_READ_VUS:-${vus}}"
+            export LOADTEST_TICKET_SERVICE_READ_DURATION="${LOADTEST_TICKET_SERVICE_READ_DURATION:-${duration}}"
+            export LOADTEST_CUSTOMER_POOL_SIZE="${LOADTEST_CUSTOMER_POOL_SIZE:-${vus}}"
+            export LOADTEST_TICKET_SERVICE_READ_ACTIVE_CUSTOMER_COUNT="${LOADTEST_TICKET_SERVICE_READ_ACTIVE_CUSTOMER_COUNT:-${vus}}"
+            ;;
           report-smoke)
             export LOADTEST_VUS="${vus}"
             export LOADTEST_DURATION="${duration}"
@@ -311,7 +318,7 @@ tasks:
         disable_kong_rate_limit="${LOADTEST_DISABLE_KONG_RATE_LIMIT:-}"
         if [ -z "${disable_kong_rate_limit}" ]; then
           case "${scenario}" in
-            reservation-journey-load-test|reservation-create-load-test|reservation-seat-contention-load-test)
+            reservation-journey-load-test|reservation-create-load-test|reservation-seat-contention-load-test|ticket-service-read-load-test)
               disable_kong_rate_limit="true"
               ;;
           esac
@@ -325,9 +332,13 @@ tasks:
         fi
         task secret-local
         task deploy
-        if [ "${scenario}" != "auth-login-load-test" ]; then
+        case "${scenario}" in
+          auth-login-load-test|ticket-service-read-load-test)
+            ;;
+          *)
           task setup-dataset
-        fi
+            ;;
+        esac
         task run
 
   kong-rate-limit:disable:
