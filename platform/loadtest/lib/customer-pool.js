@@ -15,8 +15,12 @@ export function customerPoolAccount(config, index) {
   };
 }
 
+export function activeCustomerCount(config) {
+  return config.activeCustomerCount || config.customerPool.size;
+}
+
 export function customerPoolIndexForIteration(config, vu, iteration) {
   const vuIndex = Math.max(0, Number(vu) - 1);
   const iterationIndex = Math.max(0, Number(iteration));
-  return (vuIndex + (iterationIndex * config.plannedMaxVus)) % config.customerPool.size;
+  return (vuIndex + (iterationIndex * config.plannedMaxVus)) % activeCustomerCount(config);
 }

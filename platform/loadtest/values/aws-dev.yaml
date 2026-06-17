@@ -55,6 +55,9 @@ scenarios:
       - duration: 2m
         target: 10
     thinkTimeSeconds: 4
+    ticketListLimit: 20
+    ticketListMaxPages: 5
+    activeCustomerCount: 100
     thresholds:
       httpReqFailedRate: "0.01"
       httpReqDurationP95Ms: "750"

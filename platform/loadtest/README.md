@@ -18,18 +18,20 @@ GET /performances/{id}/seats
 
 `reservation-journey-load-test`는 write path를 포함하는 별도 시나리오다.
 synthetic E2E처럼 해피패스를 확인하지만 목적은 낮은 트래픽 생존성 확인이 아니라 VU를 단계적으로 올려 예매 과정의 첫 병목을 찾는 것이다.
-실행 전 `setup()`에서 customer pool 계정을 미리 로그인해 customer별 access token을 준비하고, 측정 구간은 앱 안에서 이미 로그인된 사용자가 예매를 진행하는 모델로 본다.
+실행 전 `setup()`에서 `loadtest_run_id` 기반 email prefix로 신규 customer pool을 만들고, 실제 부하에 참여할 customer의 access token을 준비한다.
+측정 구간은 앱 안에서 이미 로그인된 사용자가 예매를 진행하는 모델로 본다.
 auth-service access token 기본 TTL은 900초이므로, 현재 구현은 15분 이내 실행을 전제로 한다.
 더 긴 실험은 setup 토큰 재사용이 아니라 별도 refresh 설계가 필요하다.
 
 ```text
-setup/pre-login: POST /auth/login
+setup/account-pool: POST /auth/signup 또는 POST /auth/login 검증
+setup/pre-login: active customer token 준비
 measure: GET /concerts
 measure: GET /concerts/{id}/performances
 measure: GET /performances/{id}/seats
 measure: POST /reservations
 measure: POST /payments
-measure: GET /tickets/me
+measure: GET /tickets/me?limit=...&cursor=...
 ```
 
 기본 좌석 선택은 dataset concert 안에서 run id 기반으로 분산한다.
@@ -94,7 +96,7 @@ values/scenarios/reservation-journey-load-test.yaml
 ```
 
 조회 기준선의 VU, duration, stages, read limit, threshold는 `scenarios.readApiBaseline`에서만 조절한다.
-예매 여정의 executor, rate, VU 한도, duration, stages, polling, 결제 금액, 좌석 재시도, threshold는 `scenarios.reservationJourney`에서만 조절한다.
+예매 여정의 executor, rate, VU 한도, duration, stages, polling, ticket list page 범위, active customer 수, 결제 금액, 좌석 재시도, threshold는 `scenarios.reservationJourney`에서만 조절한다.
 dataset setup 조건은 `dataset` 아래에 두고, fresh pool은 `dataset.revision` 또는 `dataset.customerPool.revision`으로 분리한다.
 
 ## Commands
@@ -193,6 +195,9 @@ scenarios:
     timeUnit: 1s
     preAllocatedVUs: 20
     maxVUs: 100
+    activeCustomerCount: 100
+    ticketListLimit: 20
+    ticketListMaxPages: 5
     stages:
       - duration: 2m
         target: 2
@@ -205,8 +210,11 @@ scenarios:
 dataset setup에는 `LOADTEST_PROVIDER_EMAIL`, `LOADTEST_PROVIDER_PASSWORD`, `LOADTEST_ADMIN_EMAIL`, `LOADTEST_ADMIN_PASSWORD`를 가진 `dataset.credentialsSecretName` Secret이 필요하다.
 reservation journey 본 실행은 signup을 측정 구간에 포함하지 않는다.
 실행 전에 `dataset.profile=reservation-journey`로 dataset setup을 돌려 customer pool과 예매용 공연/회차/좌석을 준비한다.
-fresh pool을 만들려면 `dataset.revision` 또는 `dataset.customerPool.revision`을 새 값으로 바꾼다.
-본 실행의 `setup()`은 `LOADTEST_CUSTOMER_POOL_*` 값으로 계정을 계산해 customer pool을 미리 로그인하고, `{ customerIndex, customerId, accessToken }` 토큰 목록만 VU에 넘긴다.
-default 함수는 `customerPoolIndexForIteration(config, __VU, __ITER)`로 같은 index의 토큰을 골라 예매 API 인증 헤더에만 사용한다.
+본 실행의 `setup()`은 `LOADTEST_CUSTOMER_POOL_*` 값과 `LOADTEST_RUN_ID`를 조합해 매 실행마다 신규 customer pool을 만들고, `{ customerIndex, customerId, accessToken }` 토큰 목록만 VU에 넘긴다.
+`dataset.customerPool.size`는 setup에서 생성 또는 검증하는 전체 계정 수이고, `scenarios.reservationJourney.activeCustomerCount`는 실제 부하에 참여하는 계정 수다.
+기본값은 둘 다 100명으로 두어 6분 ramping-arrival-rate 실행에서도 계정당 ticket 수가 비현실적으로 누적되지 않게 한다.
+더 높은 arrival rate나 긴 duration을 쓰면 active customer 수를 같이 늘려 계정당 ticket 수를 대략 100건 안쪽으로 유지한다.
+default 함수는 `customerPoolIndexForIteration(config, __VU, __ITER)`로 active customer 범위 안의 토큰을 골라 예매 API 인증 헤더에만 사용한다.
 측정 루프는 `catalog.select_seat -> reservation.create -> payment.approve -> ticket.wait` 순서이며 매 iteration마다 새 `POST /auth/login`을 호출하지 않는다.
+`ticket.wait`는 `/tickets/me` 전체 목록을 반복 조회하지 않고 `ticketListLimit`와 `ticketListMaxPages`로 제한한 cursor pagination만 사용한다.
 metric tag에는 customer email, user id, reservation id, payment id, ticket id를 넣지 않고, email, password, raw token은 JSON 로그에도 남기지 않는다.

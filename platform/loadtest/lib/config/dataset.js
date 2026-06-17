@@ -37,7 +37,7 @@ export function getDatasetConfig() {
       checksRate: rate('LOADTEST_DATASET_THRESHOLD_CHECKS_RATE', 0.99),
     },
     customerPool: {
-      size: positiveInteger('LOADTEST_CUSTOMER_POOL_SIZE', 50),
+      size: positiveInteger('LOADTEST_CUSTOMER_POOL_SIZE', 100),
       emailPrefix: optional('LOADTEST_CUSTOMER_POOL_EMAIL_PREFIX', 'loadtest'),
       emailDomain: optional('LOADTEST_CUSTOMER_POOL_EMAIL_DOMAIN', 'loadtest.medikong.local'),
       password: optional('LOADTEST_CUSTOMER_POOL_PASSWORD', 'loadtest1234'),

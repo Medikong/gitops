@@ -35,6 +35,9 @@ export function requireCustomerPool(config) {
   if (!config.customerPool.password) {
     throw new Error('LOADTEST_CUSTOMER_POOL_PASSWORD required for reservation journey loadtest');
   }
+  if (config.activeCustomerCount && config.customerPool.size < config.activeCustomerCount) {
+    throw new Error('LOADTEST_CUSTOMER_POOL_SIZE must be greater than or equal to LOADTEST_RESERVATION_JOURNEY_ACTIVE_CUSTOMER_COUNT');
+  }
 }
 
 export function requireDatasetCredentials(config) {

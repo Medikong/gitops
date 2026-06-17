@@ -140,18 +140,30 @@ function ticketMatches(ticket, reservation) {
 export function waitForTicket(config, token, reservation) {
   const deadline = Date.now() + config.pollSeconds * 1000;
   while (Date.now() <= deadline) {
-    const body = requestJson(
-      config,
-      'reservation_journey.ticket.list',
-      'GET',
-      '/tickets/me',
-      null,
-      authHeaders(token),
-    );
-    const items = Array.isArray(body) ? body : body.items || [];
-    const ticket = items.find((item) => ticketMatches(item, reservation));
-    if (ticket) {
-      return ticket;
+    let cursor = null;
+    for (let page = 0; page < config.ticketListMaxPages; page += 1) {
+      const query = {
+        limit: config.ticketListLimit,
+        cursor,
+      };
+      const body = requestJson(
+        config,
+        'reservation_journey.ticket.list',
+        'GET',
+        '/tickets/me',
+        null,
+        authHeaders(token),
+        query,
+      );
+      const items = itemsFrom(body, 'reservation_journey.ticket.list');
+      const ticket = items.find((item) => ticketMatches(item, reservation));
+      if (ticket) {
+        return ticket;
+      }
+      cursor = body.nextCursor;
+      if (!cursor) {
+        break;
+      }
     }
     sleep(config.pollIntervalSeconds);
   }

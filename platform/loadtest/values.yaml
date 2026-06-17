@@ -46,7 +46,7 @@ dataset:
   discoveryLimit: 200
   createPauseSeconds: 0
   customerPool:
-    size: 50
+    size: 100
     emailPrefix: loadtest
     emailDomain: loadtest.medikong.local
     password: loadtest1234
@@ -163,6 +163,9 @@ scenarios:
     thinkTimeSeconds: 0
     pollSeconds: 45
     pollIntervalSeconds: 2
+    ticketListLimit: 20
+    ticketListMaxPages: 5
+    activeCustomerCount: 100
     paymentAmount: 50000
     maxSeatAttempts: 3
     concertLimit: 50

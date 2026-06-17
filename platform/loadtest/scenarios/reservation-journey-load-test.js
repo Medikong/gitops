@@ -3,7 +3,7 @@ import { check, fail, group, sleep } from 'k6';
 import { Rate } from 'k6/metrics';
 
 import { getConfig, requireCustomerPool } from '../lib/config.js';
-import { customerPoolAccount, customerPoolIndexForIteration } from '../lib/customer-pool.js';
+import { activeCustomerCount, customerPoolAccount, customerPoolIndexForIteration } from '../lib/customer-pool.js';
 import { httpStepThresholds, RESERVATION_JOURNEY_STEPS } from '../lib/http-metrics.js';
 import {
   logExperimentConditions,
@@ -35,7 +35,6 @@ function iterationConfig() {
     iterationId,
     requestIdBase: `${config.requestPrefix}-${config.scenario}-${iterationId}`,
     customer: {
-      ...customerPoolAccount(config, customerIndex),
       index: customerIndex,
     },
   };
@@ -100,39 +99,39 @@ function preLoginTags(runConfig) {
   };
 }
 
-function preLoginCustomer(runConfig, account) {
-  const payload = JSON.stringify({
-    email: account.email,
-    password: account.password,
-  });
-  const response = http.request('POST', `${runConfig.baseUrl}/auth/login`, payload, {
+function setupAuthRequestJson(runConfig, method, path, body, expectedStatuses) {
+  const payload = body === null || body === undefined ? null : JSON.stringify(body);
+  const response = http.request(method, `${runConfig.baseUrl}${path}`, payload, {
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
       'X-Loadtest-Traffic': 'true',
     },
-    responseCallback: http.expectedStatuses(200),
+    responseCallback: http.expectedStatuses(...expectedStatuses),
     timeout: `${runConfig.timeoutSeconds}s`,
     tags: {
       ...preLoginTags(runConfig),
-      name: 'POST /auth/login',
-      route: 'POST /auth/login',
+      name: `${method} ${path}`,
+      route: `${method} ${path}`,
       service: 'auth-service',
     },
   });
 
   const ok = check(response, {
-    'reservation journey pre-login returned 200': (res) => res.status === 200,
-    'reservation journey pre-login returned json': (res) => String(res.headers['Content-Type'] || res.headers['content-type'] || '').includes('application/json'),
+    'reservation journey setup auth returned expected status': (res) => expectedStatuses.includes(res.status),
+    'reservation journey setup auth returned json': (res) => String(res.headers['Content-Type'] || res.headers['content-type'] || '').includes('application/json'),
   }, preLoginTags(runConfig));
   if (!ok) {
-    fail(`${PRE_LOGIN_STEP} failed with status ${response.status}`);
+    fail(`${PRE_LOGIN_STEP} ${method} ${path} failed with status ${response.status}`);
   }
 
   try {
-    return response.json();
+    return {
+      status: response.status,
+      body: response.json(),
+    };
   } catch (error) {
-    fail(`${PRE_LOGIN_STEP} returned invalid json: ${error.message}`);
+    fail(`${PRE_LOGIN_STEP} ${method} ${path} returned invalid json: ${error.message}`);
   }
   return null;
 }
@@ -149,13 +148,74 @@ function customerTokenFromAuth(index, auth) {
   };
 }
 
+function runScopedCustomerConfig(runConfig) {
+  const runToken = String(runConfig.runId || 'run')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(-24) || 'run';
+  return {
+    ...runConfig,
+    customerPool: {
+      ...runConfig.customerPool,
+      emailPrefix: `${runConfig.customerPool.emailPrefix}-${runToken}`,
+    },
+  };
+}
+
+function signupOrLoginCustomer(runConfig, index) {
+  const account = customerPoolAccount(runConfig, index);
+  const signup = setupAuthRequestJson(
+    runConfig,
+    'POST',
+    '/auth/signup',
+    {
+      email: account.email,
+      password: account.password,
+      displayName: account.displayName,
+    },
+    [201, 409],
+  );
+
+  if (signup.status === 201) {
+    return { created: true, token: customerTokenFromAuth(index, signup.body) };
+  }
+
+  const login = setupAuthRequestJson(
+    runConfig,
+    'POST',
+    '/auth/login',
+    {
+      email: account.email,
+      password: account.password,
+    },
+    [200],
+  );
+  return { created: false, token: customerTokenFromAuth(index, login.body) };
+}
+
 function prepareCustomerTokens(runConfig) {
   const customerTokens = [];
+  const activeCount = activeCustomerCount(runConfig);
+  const state = {
+    createdCustomers: 0,
+    reusedCustomers: 0,
+    verifiedCustomers: 0,
+    activeCustomers: activeCount,
+  };
   for (let index = 0; index < runConfig.customerPool.size; index += 1) {
-    const account = customerPoolAccount(runConfig, index);
-    customerTokens.push(customerTokenFromAuth(index, preLoginCustomer(runConfig, account)));
+    const result = signupOrLoginCustomer(runConfig, index);
+    if (result.created) {
+      state.createdCustomers += 1;
+    } else {
+      state.reusedCustomers += 1;
+    }
+    state.verifiedCustomers += 1;
+    if (index < activeCount) {
+      customerTokens.push(result.token);
+    }
   }
-  return customerTokens;
+  return { customerTokens, state };
 }
 
 function customerTokenForIteration(setupData, customerIndex) {
@@ -213,10 +273,11 @@ export const options = {
 
 export function setup() {
   requireCustomerPool(config);
-  logExperimentConditions(config, 'reservation_journey_setup');
-  const customerTokens = prepareCustomerTokens(config);
-  logExperimentConditions(config, 'reservation_journey_measurement');
-  return { customerTokens };
+  const setupConfig = runScopedCustomerConfig(config);
+  logExperimentConditions(setupConfig, 'reservation_journey_setup');
+  const { customerTokens, state } = prepareCustomerTokens(setupConfig);
+  logExperimentConditions(setupConfig, 'reservation_journey_measurement');
+  return { customerTokens, customerState: state };
 }
 
 export default function reservationJourneyLoadTest(setupData) {

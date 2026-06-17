@@ -52,6 +52,9 @@ data:
   LOADTEST_RESERVATION_JOURNEY_THINK_TIME_SECONDS: {{ .Values.scenarios.reservationJourney.thinkTimeSeconds | quote }}
   LOADTEST_RESERVATION_JOURNEY_POLL_SECONDS: {{ .Values.scenarios.reservationJourney.pollSeconds | quote }}
   LOADTEST_RESERVATION_JOURNEY_POLL_INTERVAL_SECONDS: {{ .Values.scenarios.reservationJourney.pollIntervalSeconds | quote }}
+  LOADTEST_RESERVATION_JOURNEY_TICKET_LIST_LIMIT: {{ .Values.scenarios.reservationJourney.ticketListLimit | quote }}
+  LOADTEST_RESERVATION_JOURNEY_TICKET_LIST_MAX_PAGES: {{ .Values.scenarios.reservationJourney.ticketListMaxPages | quote }}
+  LOADTEST_RESERVATION_JOURNEY_ACTIVE_CUSTOMER_COUNT: {{ .Values.scenarios.reservationJourney.activeCustomerCount | quote }}
   LOADTEST_RESERVATION_JOURNEY_PAYMENT_AMOUNT: {{ .Values.scenarios.reservationJourney.paymentAmount | quote }}
   LOADTEST_RESERVATION_JOURNEY_MAX_SEAT_ATTEMPTS: {{ .Values.scenarios.reservationJourney.maxSeatAttempts | quote }}
   LOADTEST_RESERVATION_JOURNEY_CONCERT_LIMIT: {{ .Values.scenarios.reservationJourney.concertLimit | quote }}
