@@ -15,6 +15,11 @@ spec:
     - mesh
   http:
     - name: reservation-canary-20
+      timeout: 2s
+      retries:
+        attempts: 2
+        perTryTimeout: 1s
+        retryOn: 5xx,connect-failure,refused-stream
       route:
         - destination:
             host: reservation-service.ticketing-reservation.svc.cluster.local
