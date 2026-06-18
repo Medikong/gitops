@@ -3,4 +3,4 @@ kind: Kustomization
 
 resources:
   - destination-rule.yaml
-  - scenarios/canary-20/virtual-service.yaml
+  - virtual-service-stable.yaml
