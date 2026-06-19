@@ -23,7 +23,6 @@ vars:
   KONG_VALUES: '{{default "platform/kong/values-local.yaml" .KONG_VALUES}}'
   KONG_PROXY_SERVICE: '{{default "kong-kong-proxy" .KONG_PROXY_SERVICE}}'
   AWS_ARGO_ROOT: '{{default "argo/applications/aws-dev/root.yaml" .AWS_ARGO_ROOT}}'
-  AWS_LOADTEST_RATE_LIMIT_SYNC_WAIT_SECONDS: '{{default "90" .AWS_LOADTEST_RATE_LIMIT_SYNC_WAIT_SECONDS}}'
   ISTIO_PLATFORM: '{{default "platform/istio" .ISTIO_PLATFORM}}'
 
 includes:
@@ -157,36 +156,6 @@ tasks:
           exit 2
         fi
 
-        kong_argo_file="argo/applications/aws-dev/platform/kong-shared-resources.yaml"
-        kong_loadtest_path="platform/kong-overlays/aws-dev-loadtest"
-        KONG_ARGO_FILE="${kong_argo_file}" KONG_PATH="${kong_loadtest_path}" ruby -e '
-          path = ENV.fetch("KONG_ARGO_FILE")
-          desired = ENV.fetch("KONG_PATH")
-          lines = File.readlines(path)
-          changed = false
-          out = lines.map do |line|
-            match = line.match(/^(\s*)path:\s+platform\/(?:kong|kong-overlays\/aws-dev-loadtest)\s*$/)
-            next line unless match
-
-            replacement = "#{match[1]}path: #{desired}\n"
-            changed ||= replacement != line
-            replacement
-          end
-          desired_path = Regexp.escape(desired)
-          abort("Could not find aws-dev kong shared resources path in #{path}") unless out.any? { |line| line.match?(/^\s*path:\s+#{desired_path}\s*$/) }
-          File.write(path, out.join) if changed
-        '
-        git add "${kong_argo_file}"
-        if git diff --cached --quiet -- "${kong_argo_file}"; then
-          printf 'AWS loadtest Kong rate limit overlay already selected.\n'
-        else
-          git commit -m "chore(kong): disable rate limit for aws-dev loadtest" -- "${kong_argo_file}"
-          git push
-          wait_seconds="{{.AWS_LOADTEST_RATE_LIMIT_SYNC_WAIT_SECONDS}}"
-          printf 'Waiting %ss for ArgoCD to apply Kong rate-limit overlay before triggering loadtest.\n' "${wait_seconds}"
-          sleep "${wait_seconds}"
-        fi
-
         run_file="platform/loadtest/values/runs/aws-dev/${scenario_base}-${preset}.yaml"
         argo_file="argo/applications/aws-dev/platform/loadtest.yaml"
         chart_preset_file="${preset_file#platform/loadtest/}"
@@ -231,38 +200,6 @@ tasks:
         git commit -m "chore(loadtest): trigger aws-dev ${preset} run" -- "${argo_file}" "${run_file}"
         git push
         printf 'Triggered aws-dev loadtest preset=%s scenario=%s run_id=%s\n' "${preset}" "${scenario}" "${run_id}"
-
-  aws:loadtest:restore-rate-limit:
-    desc: aws-dev Kong shared resources를 기본 rate-limit manifest 경로로 되돌립니다.
-    cmds:
-      - |
-        set -eu
-        kong_argo_file="argo/applications/aws-dev/platform/kong-shared-resources.yaml"
-        KONG_ARGO_FILE="${kong_argo_file}" KONG_PATH="platform/kong" ruby -e '
-          path = ENV.fetch("KONG_ARGO_FILE")
-          desired = ENV.fetch("KONG_PATH")
-          lines = File.readlines(path)
-          changed = false
-          out = lines.map do |line|
-            match = line.match(/^(\s*)path:\s+platform\/(?:kong|kong-overlays\/aws-dev-loadtest)\s*$/)
-            next line unless match
-
-            replacement = "#{match[1]}path: #{desired}\n"
-            changed ||= replacement != line
-            replacement
-          end
-          desired_path = Regexp.escape(desired)
-          abort("Could not find aws-dev kong shared resources path in #{path}") unless out.any? { |line| line.match?(/^\s*path:\s+#{desired_path}\s*$/) }
-          File.write(path, out.join) if changed
-        '
-        git add "${kong_argo_file}"
-        if git diff --cached --quiet -- "${kong_argo_file}"; then
-          printf 'AWS Kong shared resources already use the default rate-limit manifest.\n'
-          exit 0
-        fi
-        git commit -m "chore(kong): restore aws-dev rate limit" -- "${kong_argo_file}"
-        git push
-        printf 'Restored aws-dev Kong shared resources to the default rate-limit manifest.\n'
 
   dev:platform:
     internal: true
