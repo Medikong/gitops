@@ -15,8 +15,8 @@ spec:
       releaseName: read-api-loadtest
       valueFiles:
         - values/aws-dev.yaml
-        - values/presets/reservation-journey/stress-find-limit.yaml
-        - values/runs/aws-dev/reservation-journey-stress-find-limit.yaml
+        - values/presets/reservation-journey/mau10k-ticket-open.yaml
+        - values/runs/aws-dev/reservation-journey-mau10k-ticket-open.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: loadtest
