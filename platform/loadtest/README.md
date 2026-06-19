@@ -198,6 +198,7 @@ preset values 파일은 `values/presets/reservation-journey/` 아래에 두고, 
 
 ```text
 values/presets/reservation-journey/local-ticket-open-5m.yaml
+values/presets/reservation-journey/aws-dev-smoke-1m.yaml
 values/presets/reservation-journey/mau10k-normal-peak.yaml
 values/presets/reservation-journey/mau10k-ticket-open.yaml
 values/presets/reservation-journey/mau10k-ticket-open-aggressive.yaml
@@ -214,6 +215,9 @@ values/presets/ticket-service-read/local-ticket-read-smoke.yaml
 
 `local-ticket-open-5m`은 로컬 재검증용이다.
 MAU 1만 티켓 오픈 가정을 5분 동안 `2 journey/s`로 짧게 실행해 ticket-service tail latency와 관측계 부담을 함께 확인한다.
+
+`aws-dev-smoke-1m`은 aws-dev에서 runner, credential, dataset setup, 예매 여정, 자동 보고서 경로만 빠르게 확인하는 1분 smoke다.
+`1 journey/s`로 1분만 실행하므로 용량 판단에는 쓰지 않는다.
 
 `mau10k-ticket-open`은 MAU 1만, DAU/MAU 20%, DAU의 30%가 티켓 오픈 10분 안에 몰리는 상황을 가정한다.
 계산값은 `1 journey/s`이고 safety factor 2를 적용해 `2 journey/s`로 실행한다.
