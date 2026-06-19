@@ -202,7 +202,7 @@ prometheus:
 prometheusOperator:
   image:
     registry: quay.io
-    repository: prometheus-operator/prometheus-operator
+    repository: pronotum-operator/prometheus-operator
     tag: v0.90.1
   prometheusConfigReloader:
     image:
@@ -253,3 +253,40 @@ prometheus-node-exporter:
     limits:
       cpu: 100m
       memory: 64Mi
+
+additionalManifests:
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: alertmanager-discord
+      namespace: monitoring
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: alertmanager-discord
+      template:
+        metadata:
+          labels:
+            app: alertmanager-discord
+        spec:
+          containers:
+          - name: alertmanager-discord
+            image: benjojo/alertmanager-discord:latest
+            ports:
+            - containerPort: 9094
+            env:
+            - name: DISCORD_WEBHOOK
+              value: "https://discord.com/api/webhooks/1517439837165060217/cI7CINSHhBWJuFp8p2uaIrze89xbfYPSdhOz3e7o0G8RxbHhXzYkl84BMX1tV8hlAjIy"
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: alertmanager-discord
+      namespace: monitoring
+    spec:
+      selector:
+        app: alertmanager-discord
+      ports:
+      - port: 9094
+        targetPort: 9094
+        name: http
