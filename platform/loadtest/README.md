@@ -246,6 +246,8 @@ activeCustomerCount >= ceil(expectedJourneys / targetTicketsPerCustomer)
 운영에서는 배포나 sync만으로 부하테스트를 자동 실행하지 않는다.
 aws-dev chart는 CronJob을 만들지 않는다.
 aws-dev 수동 실행은 `task aws:loadtest`가 GitOps run values의 `manualRuns.read.runId`를 새 값으로 바꾸고 commit/push해서 ArgoCD Hook Job을 한 번 생성한다.
+`task aws:loadtest`는 loadtest run trigger를 push하기 전에 aws-dev Kong shared resources를 `platform/kong-overlays/aws-dev-loadtest`로 전환해 `ticketing-rate-limit-*` 한도를 크게 올린다.
+부하테스트를 마친 뒤 제품 기본 rate limit으로 되돌릴 때는 `task aws:loadtest:restore-rate-limit`를 실행한다.
 기본 실행은 `aws-dev-smoke-1m`이고, 다른 실험은 `PRESET=<preset-name>`으로 선택한다.
 팀원은 git push 권한만 있으면 실행할 수 있고, 각자 로컬 kubeconfig나 SSH 키를 가질 필요가 없다.
 Job은 클러스터 안에서 실행되므로 로컬이나 GitHub Actions runner의 CPU로 부하를 만들지 않는다.
@@ -270,6 +272,7 @@ Kong rate limit을 포함한 제품 경로 기준선을 보려면 `LOADTEST_DISA
 task --dir gitops aws:loadtest
 PRESET=mau10k-ticket-open task --dir gitops aws:loadtest
 PRESET=stress-find-limit task --dir gitops aws:loadtest
+task --dir gitops aws:loadtest:restore-rate-limit
 
 SCENARIO=read-api-baseline task --dir gitops dev:loadtest
 SCENARIO=auth-login-load-test task --dir gitops dev:loadtest

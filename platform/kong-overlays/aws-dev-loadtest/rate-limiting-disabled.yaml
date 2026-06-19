@@ -1,0 +1,39 @@
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: ticketing-rate-limit-concerts
+config:
+  minute: 1000000
+  policy: local
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: ticketing-rate-limit-reservations
+config:
+  minute: 1000000
+  policy: local
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: ticketing-rate-limit-payments
+config:
+  minute: 1000000
+  policy: local
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: ticketing-rate-limit-tickets
+config:
+  minute: 1000000
+  policy: local
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: ticketing-rate-limit-notifications
+config:
+  minute: 1000000
+  policy: local
