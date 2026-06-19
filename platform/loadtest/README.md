@@ -38,7 +38,8 @@ measure: GET /tickets/me?limit=...&cursor=...
 기본 좌석 선택은 dataset concert 안에서 run id 기반으로 분산한다.
 좌석 경쟁 자체를 확인하는 실험은 별도 시나리오로 둔다.
 `reservation_id`, `payment_id`, `ticket_id` 같은 동적 ID는 metric label/tag가 아니라 JSON 로그 필드에만 남긴다.
-단계별 latency는 본 실행 step tag가 붙은 `http_req_duration`으로 보고, setup/pre-login은 run report의 `api_step_results` 대상에서 제외한다.
+단계별 latency는 step tag가 붙은 `http_req_duration`으로 본다.
+본 실행 step은 물론 setup/pre-login auth 호출도 `api_step_results`에 포함해, smoke가 setup에서 실패해도 `/auth/signup|login`의 p50/p95/p99, error rate, RPS를 확인할 수 있게 한다.
 예매 성공률, 409 비율, 티켓 발급률은 custom metric threshold로 본다.
 
 `reservation-create-load-test`는 예약 생성 경로만 분리한 R2 시나리오다.
