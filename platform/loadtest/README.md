@@ -243,8 +243,10 @@ activeCustomerCount >= ceil(expectedJourneys / targetTicketsPerCustomer)
 ## Commands
 
 운영에서는 배포나 sync만으로 부하테스트를 자동 실행하지 않는다.
-aws-dev chart는 CronJob을 만들지 않고 Argo sync hook도 기본으로 꺼두며, 실험할 때만 `manualRuns.*.enabled`와 `manualRuns.*.runId` 값을 GitOps로 바꿔 선언한다.
+aws-dev chart는 CronJob을 만들지 않는다.
+실험할 때만 `manualRuns.*.runId` 값을 GitOps로 바꿔 Argo Hook Job을 한 번 실행한다.
 같은 수동 Job을 다시 만들려면 `runId`를 새 값으로 바꾼다.
+Hook Job은 성공하면 ArgoCD가 자동 삭제하고, 실패하면 로그 확인을 위해 남긴다.
 runner image는 `.github/workflows/loadtest-image-publish.yml`이 ECR에 publish하고, `values/aws-dev.yaml`의 `image.tag`를 commit SHA 기반 tag로 갱신한다.
 
 로컬에서는 개발 편의를 위해 Taskfile 명령으로 직접 실행한다.
@@ -314,15 +316,17 @@ task --dir gitops dev:loadtest:setup-dataset
 task --dir gitops dev:loadtest:run
 ```
 
-`values/aws-dev.yaml`은 CronJob을 만들지 않고 Argo sync hook Job도 끈다.
-부하테스트는 자동 반복 실행하면 결과 해석이 흐려지므로, 실험 조건을 확정한 뒤 manualRuns로 한 번씩 실행한다.
+`values/aws-dev.yaml`은 CronJob을 만들지 않는다.
+부하테스트는 자동 반복 실행하면 결과 해석이 흐려지므로, 실험 조건을 확정한 뒤 `manualRuns.*.runId`로 한 번씩 실행한다.
+`enabled`는 이전 값 파일과의 호환성을 위해 남겨두지만, 새 수동 실행은 `runId`만 채우면 된다.
+성공한 Hook Job은 ArgoCD가 자동 삭제하므로 실행 후 `enabled: false`로 되돌리는 복구 커밋은 필요 없다.
+실험을 더 이상 선언하지 않으려면 `runId: ""`로 비운다.
 
 GitOps 관리형 수동 dataset setup 예시:
 
 ```yaml
 manualRuns:
   dataset:
-    enabled: true
     runId: dataset-20260615-001
 ```
 
@@ -331,11 +335,10 @@ GitOps 관리형 수동 read baseline 예시:
 ```yaml
 manualRuns:
   read:
-    enabled: true
     runId: read-20260615-001
 ```
 
-같은 수동 Job을 다시 만들려면 `runId`를 새 값으로 바꾼다.
+같은 수동 Job을 다시 만들려면 `runId`를 새 값으로 바꾼다. 실패한 Hook Job은 남아 있으므로, 원인을 확인한 뒤 새 `runId`로 재실행한다.
 `reservation-journey-load-test` 실행 예시:
 
 ```yaml
