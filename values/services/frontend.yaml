@@ -53,3 +53,6 @@ networkPolicy:
           port: 53
         - protocol: TCP
           port: 53
+
+nodeSelector:
+  role: app
