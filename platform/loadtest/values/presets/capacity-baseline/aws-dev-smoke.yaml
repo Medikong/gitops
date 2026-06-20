@@ -30,7 +30,7 @@ manualRuns:
 reportArchive:
   enabled: true
   storageClassName: medikong-aws-gp3
-  size: 1Gi
+  size: 5Gi
 
 collectorGuard:
   enabled: true
