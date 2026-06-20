@@ -2,6 +2,7 @@ profile: local
 
 postgresql:
   image: postgres:15
+  pgData: /var/lib/postgresql/data/pgdata
   user: user
   password: password
   config:

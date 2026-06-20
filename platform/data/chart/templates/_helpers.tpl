@@ -74,6 +74,8 @@ spec:
               value: {{ $postgres.password | quote }}
             - name: POSTGRES_DB
               value: {{ $db.database | quote }}
+            - name: PGDATA
+              value: {{ $postgres.pgData | quote }}
           resources:
 {{ toYaml $postgres.resources | nindent 12 }}
           volumeMounts:
