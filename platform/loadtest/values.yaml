@@ -158,6 +158,8 @@ scenarios:
     concertLimit: 50
     performanceLimit: 50
     seatLimit: 200
+    calendarYearMonth: ""
+    performanceDate: ""
     thresholds:
       httpReqFailedRate: "0.01"
       httpReqDurationP95Ms: "500"

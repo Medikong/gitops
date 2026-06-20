@@ -124,6 +124,8 @@ data:
   LOADTEST_RESERVATION_JOURNEY_CONCERT_LIMIT: {{ .Values.scenarios.reservationJourney.concertLimit | quote }}
   LOADTEST_RESERVATION_JOURNEY_PERFORMANCE_LIMIT: {{ .Values.scenarios.reservationJourney.performanceLimit | quote }}
   LOADTEST_RESERVATION_JOURNEY_SEAT_LIMIT: {{ .Values.scenarios.reservationJourney.seatLimit | quote }}
+  LOADTEST_RESERVATION_JOURNEY_CALENDAR_YEAR_MONTH: {{ .Values.scenarios.reservationJourney.calendarYearMonth | quote }}
+  LOADTEST_RESERVATION_JOURNEY_PERFORMANCE_DATE: {{ .Values.scenarios.reservationJourney.performanceDate | quote }}
   LOADTEST_RESERVATION_JOURNEY_THRESHOLD_HTTP_REQ_FAILED_RATE: {{ .Values.scenarios.reservationJourney.thresholds.httpReqFailedRate | quote }}
   LOADTEST_RESERVATION_JOURNEY_THRESHOLD_HTTP_REQ_DURATION_P95_MS: {{ .Values.scenarios.reservationJourney.thresholds.httpReqDurationP95Ms | quote }}
   LOADTEST_RESERVATION_JOURNEY_THRESHOLD_HTTP_REQ_DURATION_P99_MS: {{ .Values.scenarios.reservationJourney.thresholds.httpReqDurationP99Ms | quote }}

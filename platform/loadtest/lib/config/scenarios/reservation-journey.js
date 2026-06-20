@@ -40,6 +40,8 @@ export function getReservationJourneyConfig() {
     concertLimit: positiveInteger('LOADTEST_RESERVATION_JOURNEY_CONCERT_LIMIT', 50),
     performanceLimit: positiveInteger('LOADTEST_RESERVATION_JOURNEY_PERFORMANCE_LIMIT', 50),
     seatLimit: positiveInteger('LOADTEST_RESERVATION_JOURNEY_SEAT_LIMIT', 200),
+    calendarYearMonth: optional('LOADTEST_RESERVATION_JOURNEY_CALENDAR_YEAR_MONTH', ''),
+    performanceDate: optional('LOADTEST_RESERVATION_JOURNEY_PERFORMANCE_DATE', ''),
     thresholds: {
       httpReqFailedRate: rate('LOADTEST_RESERVATION_JOURNEY_THRESHOLD_HTTP_REQ_FAILED_RATE', 0.01),
       httpReqDurationP95Ms: positiveNumber('LOADTEST_RESERVATION_JOURNEY_THRESHOLD_HTTP_REQ_DURATION_P95_MS', 500),

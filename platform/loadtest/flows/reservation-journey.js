@@ -18,6 +18,24 @@ function pickByRunId(items, step, runId, offset = 0) {
   return items[(hashString(runId) + offset) % items.length];
 }
 
+function arrayFieldFrom(body, field, step) {
+  const values = body && body[field];
+  if (!Array.isArray(values)) {
+    fail(`${step} response did not contain a ${field} array`);
+  }
+  return values;
+}
+
+function valueFrom(item, fields, step) {
+  for (const field of fields) {
+    if (item && item[field] !== undefined && item[field] !== null && item[field] !== '') {
+      return item[field];
+    }
+  }
+  fail(`${step} response item did not contain any of ${fields.join(', ')}`);
+  return null;
+}
+
 function availableSeats(items) {
   return (items || []).filter((seat) => String(seat.status || '').toLowerCase() === 'available');
 }
@@ -26,22 +44,49 @@ function stepName(config, suffix) {
   return `${config.stepPrefix || 'reservation_journey'}.${suffix}`;
 }
 
-function datasetConcerts(config, concerts) {
+function datasetConcerts(config, concerts, step = stepName(config, 'concerts')) {
   const expectedPrefix = `${config.dataset.titlePrefix} ${config.dataset.profile} ${config.dataset.revision} `;
   const candidates = concerts.filter((concert) => String(concert.title || '').startsWith(expectedPrefix));
   if (candidates.length === 0) {
-    fail(`${stepName(config, 'concerts')} returned no dataset concerts with prefix ${expectedPrefix}`);
+    fail(`${step} returned no dataset concerts with prefix ${expectedPrefix}`);
   }
   return candidates;
 }
 
-export function selectReservationTarget(config, attempt = 0) {
+function isoDateDaysFromNow(days) {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function calendarYearMonth(config) {
+  if (config.calendarYearMonth) {
+    return config.calendarYearMonth;
+  }
+  if (config.performanceDate) {
+    return String(config.performanceDate).slice(0, 7);
+  }
+  return isoDateDaysFromNow(config.dataset.lookaheadDays).slice(0, 7);
+}
+
+function selectCalendarDate(config, calendarBody, step, attempt) {
+  const days = arrayFieldFrom(calendarBody, 'days', step);
+  if (config.performanceDate) {
+    const targetDay = days.find((day) => day.date === config.performanceDate);
+    if (!targetDay || targetDay.bookable !== true) {
+      fail(`${step} did not mark ${config.performanceDate} as bookable`);
+    }
+    return config.performanceDate;
+  }
+  const bookableDays = days.filter((day) => day.bookable === true && day.date);
+  return requireField(pickByRunId(bookableDays, step, `${config.iterationId || config.runId}:date`, attempt), 'date', step);
+}
+
+function selectLegacyReservationTarget(config, attempt) {
   const selectionId = config.iterationId || config.runId;
   const concertsStep = stepName(config, 'concerts');
   const performancesStep = stepName(config, 'performances');
   const seatsStep = stepName(config, 'seats');
   const concertsBody = getJson(config, concertsStep, '/concerts', { limit: config.concertLimit });
-  const concerts = datasetConcerts(config, itemsFrom(concertsBody, concertsStep));
+  const concerts = datasetConcerts(config, itemsFrom(concertsBody, concertsStep), concertsStep);
   const concert = pickByRunId(concerts, concertsStep, `${selectionId}:concert`, attempt);
   const concertId = requireField(concert, 'id', concertsStep);
 
@@ -73,13 +118,70 @@ export function selectReservationTarget(config, attempt = 0) {
   };
 }
 
+export function selectReservationTarget(config, attempt = 0) {
+  if (config.stepPrefix && config.stepPrefix !== 'reservation_journey') {
+    return selectLegacyReservationTarget(config, attempt);
+  }
+
+  const selectionId = config.iterationId || config.runId;
+  const recommendedStep = stepName(config, 'concert.recommended');
+  const detailStep = stepName(config, 'concert.detail');
+  const calendarStep = stepName(config, 'concert.calendar');
+  const datePerformancesStep = stepName(config, 'concert.date_performances');
+  const seatMapStep = stepName(config, 'concert.seat_map');
+  const concertsBody = getJson(
+    config,
+    recommendedStep,
+    '/concerts/recommended',
+    { sort: 'latest', limit: config.concertLimit },
+  );
+  const concerts = datasetConcerts(config, itemsFrom(concertsBody, recommendedStep), recommendedStep);
+  const concert = pickByRunId(concerts, recommendedStep, `${selectionId}:concert`, attempt);
+  const concertId = valueFrom(concert, ['concertId', 'id'], recommendedStep);
+
+  requestJson(config, detailStep, 'GET', `/concerts/${encodeURIComponent(concertId)}`);
+  const calendarBody = getJson(
+    config,
+    calendarStep,
+    `/concerts/${encodeURIComponent(concertId)}/calendar`,
+    { yearMonth: calendarYearMonth(config) },
+  );
+  const performanceDate = selectCalendarDate(config, calendarBody, calendarStep, attempt);
+  const performancesBody = getJson(
+    config,
+    datePerformancesStep,
+    `/concerts/${encodeURIComponent(concertId)}/dates/${encodeURIComponent(performanceDate)}/performances`,
+    { limit: config.performanceLimit },
+  );
+  const performances = arrayFieldFrom(performancesBody, 'performances', datePerformancesStep);
+  const performance = pickByRunId(performances, datePerformancesStep, `${selectionId}:performance`, attempt);
+  const performanceId = valueFrom(performance, ['performanceId', 'id'], datePerformancesStep);
+
+  const seatsBody = getJson(
+    config,
+    seatMapStep,
+    `/performances/${encodeURIComponent(performanceId)}/seat-map`,
+    { limit: config.seatLimit },
+  );
+  const seats = availableSeats(arrayFieldFrom(seatsBody, 'seats', seatMapStep));
+  const seat = pickByRunId(seats, seatMapStep, `${selectionId}:seat`, attempt);
+
+  return {
+    concertId,
+    performanceId,
+    showtimeId: performanceId,
+    seatId: valueFrom(seat, ['seatId', 'id'], seatMapStep),
+    seatCount: seats.length,
+  };
+}
+
 export function selectSeatContentionTarget(config, attempt = 0) {
   const selectionId = config.runId || config.iterationId;
   const concertsStep = stepName(config, 'concerts');
   const performancesStep = stepName(config, 'performances');
   const seatsStep = stepName(config, 'seats');
   const concertsBody = getJson(config, concertsStep, '/concerts', { limit: config.concertLimit });
-  const concerts = datasetConcerts(config, itemsFrom(concertsBody, concertsStep));
+  const concerts = datasetConcerts(config, itemsFrom(concertsBody, concertsStep), concertsStep);
   const concert = pickByRunId(concerts, concertsStep, `${selectionId}:concert`, 0);
   const concertId = requireField(concert, 'id', concertsStep);
 
