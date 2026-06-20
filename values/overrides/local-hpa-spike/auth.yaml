@@ -1,11 +1,11 @@
 container:
   resources:
     requests:
-      cpu: 2400m
+      cpu: 1000m
       memory: 256Mi
     limits:
-      cpu: null
-      memory: null
+      cpu: "2"
+      memory: 768Mi
 
 database:
   sqlalchemy:

@@ -67,6 +67,8 @@ scenarios:
     serviceStages:
       auth:
         - duration: 60s
+          target: 10
+        - duration: 60s
           target: 30
         - duration: 60s
           target: 40
