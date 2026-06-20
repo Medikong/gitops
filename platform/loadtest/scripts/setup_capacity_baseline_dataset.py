@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 import psycopg2
 from psycopg2.extras import execute_values
+from pymongo.errors import BulkWriteError
 from pymongo import MongoClient
 
 
@@ -388,6 +389,7 @@ def seed_notification(counts: dict):
         for notification_index in range(1, per_customer + 1):
             source_id = f"{REVISION}-notification-source-{customer_index:06d}-{notification_index:04d}"
             documents.append({
+                "_id": source_id,
                 "user_id": user_id,
                 "type": "capacity-baseline",
                 "message": f"Capacity baseline notification {notification_index}",
@@ -397,7 +399,15 @@ def seed_notification(counts: dict):
                 "created_at": now,
             })
     if documents:
-        db.notifications.insert_many(documents, ordered=False)
+        try:
+            db.notifications.insert_many(documents, ordered=False)
+        except BulkWriteError as error:
+            unexpected_errors = [
+                write_error for write_error in error.details.get("writeErrors", [])
+                if write_error.get("code") != 11000
+            ]
+            if unexpected_errors:
+                raise
     count = db.notifications.count_documents({"source_id": {"$regex": f"^{REVISION}-notification-source-"}})
     counts["notification.notifications"] = expect_count("notification.notifications", count, len(documents))
     db.notifications.create_index([("user_id", 1), ("_id", -1)])
