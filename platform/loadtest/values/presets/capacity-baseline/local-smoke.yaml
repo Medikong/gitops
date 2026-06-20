@@ -8,7 +8,7 @@ trafficModel:
 dataset:
   scenario: setup-capacity-baseline-dataset
   profile: capacity-baseline
-  revision: capacity-baseline-half-year-early-growth-v2-smoke
+  revision: capacity-baseline-hyeg-v2-smoke
   concerts: 4
   performancesPerConcert: 2
   seatSections: 1
@@ -19,7 +19,7 @@ dataset:
     emailPrefix: capacity-customer
     emailDomain: loadtest.medikong.local
     password: loadtest1234
-    revision: capacity-baseline-half-year-early-growth-v2-smoke
+    revision: capacity-baseline-hyeg-v2-smoke
 
 manualRuns:
   dataset:
@@ -29,7 +29,7 @@ manualRuns:
 
 reportArchive:
   enabled: true
-  size: 1Gi
+  size: 2Gi
 
 scenarios:
   capacityBaseline:
