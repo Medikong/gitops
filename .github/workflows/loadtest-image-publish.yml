@@ -11,6 +11,7 @@ on:
       - 'platform/loadtest/scenarios/**'
       - 'platform/loadtest/flows/**'
       - 'platform/loadtest/lib/**'
+      - 'platform/loadtest/scripts/**'
       - '.github/workflows/loadtest-image-publish.yml'
   workflow_dispatch:
     inputs:

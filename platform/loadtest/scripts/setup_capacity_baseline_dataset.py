@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import base64
+import csv
 import hashlib
+import io
 import json
 import os
 from contextlib import contextmanager
@@ -8,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 import psycopg2
 from psycopg2.extras import execute_values
-from pymongo import MongoClient, ReplaceOne
+from pymongo import MongoClient
 
 
 REVISION = os.getenv("LOADTEST_DATASET_REVISION", "capacity-baseline-v1")
@@ -110,6 +112,31 @@ def expect_count(name: str, actual: int, expected: int):
     return actual
 
 
+def _copy_value(value):
+    if value is None:
+        return r"\N"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
+def copy_rows(cursor, table: str, columns: tuple[str, ...], rows: list[tuple]):
+    if not rows:
+        return
+    stream = io.StringIO()
+    writer = csv.writer(stream, delimiter="\t", lineterminator="\n")
+    for row in rows:
+        writer.writerow([_copy_value(value) for value in row])
+    stream.seek(0)
+    column_list = ", ".join(columns)
+    cursor.copy_expert(
+        f"copy {table} ({column_list}) from stdin with (format csv, delimiter E'\\t', null '\\N')",
+        stream,
+    )
+
+
 def seed_auth(counts: dict):
     with pg("LOADTEST_CAPACITY_BASELINE_AUTH_DATABASE_URL", "postgresql://user:password@auth-db:5432/auth_db") as connection:
         cursor = connection.cursor()
@@ -139,19 +166,7 @@ def seed_auth(counts: dict):
                 "CUSTOMER",
                 True,
             ))
-        execute_values(
-            cursor,
-            """
-            insert into users (id, email, password_hash, display_name, role, is_active)
-            values %s
-            on conflict (email) do update set
-              password_hash = excluded.password_hash,
-              display_name = excluded.display_name,
-              role = excluded.role,
-              is_active = excluded.is_active
-            """,
-            users,
-        )
+        copy_rows(cursor, "users", ("id", "email", "password_hash", "display_name", "role", "is_active"), users)
         counts["auth.users"] = expect_count(
             "auth.users",
             row_count(
@@ -228,23 +243,16 @@ def seed_concert(counts: dict):
                     for number in range(1, seats_per_row + 1):
                         seats.append((f"{REVISION}-seat-{seat_seq:06d}", showtime_id, "A", f"{row}", f"{number}", "sellable"))
                         seat_seq += 1
-        execute_values(cursor, "insert into venues (id, name, address, total_seats) values %s on conflict (id) do update set name = excluded.name, address = excluded.address, total_seats = excluded.total_seats", venues)
-        execute_values(
+        copy_rows(cursor, "venues", ("id", "name", "address", "total_seats"), venues)
+        copy_rows(
             cursor,
-            """
-            insert into concerts (id, provider_id, title, description, poster_url, age_rating, running_minutes, status, created_at, updated_at, opens_at, open_schedule_status, last_reviewed_at, review_reason)
-            values %s
-            on conflict (id) do update set
-              title = excluded.title,
-              status = excluded.status,
-              opens_at = excluded.opens_at,
-              open_schedule_status = excluded.open_schedule_status
-            """,
+            "concerts",
+            ("id", "provider_id", "title", "description", "poster_url", "age_rating", "running_minutes", "status", "created_at", "updated_at", "opens_at", "open_schedule_status", "last_reviewed_at", "review_reason"),
             concerts,
         )
-        execute_values(cursor, "insert into showtimes (id, concert_id, venue_id, starts_at, ends_at, status) values %s on conflict (id) do update set starts_at = excluded.starts_at, ends_at = excluded.ends_at, status = excluded.status", showtimes)
-        execute_values(cursor, "insert into seat_grades (id, showtime_id, name, price, color) values %s on conflict (id) do update set price = excluded.price, color = excluded.color", grades)
-        execute_values(cursor, "insert into seats (id, showtime_id, section, row_label, number, status) values %s on conflict (id) do update set status = excluded.status", seats, page_size=1000)
+        copy_rows(cursor, "showtimes", ("id", "concert_id", "venue_id", "starts_at", "ends_at", "status"), showtimes)
+        copy_rows(cursor, "seat_grades", ("id", "showtime_id", "name", "price", "color"), grades)
+        copy_rows(cursor, "seats", ("id", "showtime_id", "section", "row_label", "number", "status"), seats)
         counts["concert.concerts"] = expect_count("concert.concerts", row_count(cursor, "select count(*) from concerts where id like %s", (f"{REVISION}-concert-%",)), concert_count)
         counts["concert.showtimes"] = expect_count("concert.showtimes", row_count(cursor, "select count(*) from showtimes where id like %s", (f"{REVISION}-showtime-%",)), concert_count * performances_per_concert)
         counts["concert.seats"] = expect_count("concert.seats", row_count(cursor, "select count(*) from seats where id like %s", (f"{REVISION}-seat-%",)), len(seats))
@@ -303,7 +311,7 @@ def seed_reservation(counts: dict):
                 now,
                 now,
             ))
-        execute_values(cursor, "insert into reservations (id, user_id, concert_id, showtime_id, performance_id, seat_id, status, active_seat_key, expires_at, created_at, updated_at) values %s on conflict (id) do update set status = excluded.status, expires_at = excluded.expires_at, updated_at = excluded.updated_at", reservations, page_size=1000)
+        copy_rows(cursor, "reservations", ("id", "user_id", "concert_id", "showtime_id", "performance_id", "seat_id", "status", "active_seat_key", "expires_at", "created_at", "updated_at"), reservations)
         counts["reservation.sales_states"] = expect_count("reservation.sales_states", row_count(cursor, "select count(*) from sales_states where concert_id like %s", (f"{REVISION}-concert-%",)), concert_count)
         counts["reservation.pending_pool"] = expect_count("reservation.pending_pool", row_count(cursor, "select count(*) from reservations where id like %s", (f"{REVISION}-pending-reservation-%",)), payment_pool)
 
@@ -364,7 +372,7 @@ def seed_ticket(counts: dict):
                     f"https://tickets.local/{REVISION}/{global_index}.pdf",
                     now,
                 ))
-        execute_values(cursor, "insert into tickets (reservation_id, user_id, concert_id, seat_id, status, qr_url, pdf_url, issued_at) values %s on conflict (reservation_id) do update set status = excluded.status, issued_at = excluded.issued_at", rows, page_size=1000)
+        copy_rows(cursor, "tickets", ("reservation_id", "user_id", "concert_id", "seat_id", "status", "qr_url", "pdf_url", "issued_at"), rows)
         counts["ticket.tickets"] = expect_count("ticket.tickets", row_count(cursor, "select count(*) from tickets where reservation_id like %s", (f"{REVISION}-ticket-reservation-%",)), len(rows))
 
 
@@ -373,29 +381,25 @@ def seed_notification(counts: dict):
     client = MongoClient(os.getenv("LOADTEST_CAPACITY_BASELINE_MONGODB_URL", os.getenv("MONGODB_URL", "mongodb://notification-db:27017")))
     db = client[os.getenv("LOADTEST_CAPACITY_BASELINE_MONGODB_DB_NAME", os.getenv("MONGODB_DB_NAME", "notification_db"))]
     db.notifications.delete_many({"source_id": {"$regex": f"^{REVISION}-notification-source-"}})
-    operations = []
+    documents = []
     now = datetime.now(timezone.utc)
     for customer_index in range(1, CUSTOMER_COUNT + 1):
         user_id = str(CUSTOMER_ID_BASE + customer_index)
         for notification_index in range(1, per_customer + 1):
             source_id = f"{REVISION}-notification-source-{customer_index:06d}-{notification_index:04d}"
-            operations.append(ReplaceOne(
-                {"source_id": source_id},
-                {
-                    "user_id": user_id,
-                    "type": "capacity-baseline",
-                    "message": f"Capacity baseline notification {notification_index}",
-                    "status": "CREATED",
-                    "source_id": source_id,
-                    "metadata": {"dataset_revision": REVISION},
-                    "created_at": now,
-                },
-                upsert=True,
-            ))
-    if operations:
-        db.notifications.bulk_write(operations, ordered=False)
+            documents.append({
+                "user_id": user_id,
+                "type": "capacity-baseline",
+                "message": f"Capacity baseline notification {notification_index}",
+                "status": "CREATED",
+                "source_id": source_id,
+                "metadata": {"dataset_revision": REVISION},
+                "created_at": now,
+            })
+    if documents:
+        db.notifications.insert_many(documents, ordered=False)
     count = db.notifications.count_documents({"source_id": {"$regex": f"^{REVISION}-notification-source-"}})
-    counts["notification.notifications"] = expect_count("notification.notifications", count, len(operations))
+    counts["notification.notifications"] = expect_count("notification.notifications", count, len(documents))
     db.notifications.create_index([("user_id", 1), ("_id", -1)])
     client.close()
 
