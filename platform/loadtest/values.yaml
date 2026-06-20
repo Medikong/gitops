@@ -324,6 +324,7 @@ scenarios:
         target: 1
       - duration: 20s
         target: 2
+    serviceStages: {}
     gracefulStop: 10s
     thinkTimeSeconds: 0
     activeCustomerCount: 20

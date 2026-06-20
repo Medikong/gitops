@@ -187,6 +187,7 @@ data:
   LOADTEST_CAPACITY_BASELINE_DURATION: {{ .Values.scenarios.capacityBaseline.duration | quote }}
   LOADTEST_CAPACITY_BASELINE_SERVICE_STEPS: {{ toJson .Values.scenarios.capacityBaseline.serviceSteps | quote }}
   LOADTEST_CAPACITY_BASELINE_STAGES: {{ toJson .Values.scenarios.capacityBaseline.stages | quote }}
+  LOADTEST_CAPACITY_BASELINE_SERVICE_STAGES: {{ toJson (.Values.scenarios.capacityBaseline.serviceStages | default dict) | quote }}
   LOADTEST_CAPACITY_BASELINE_GRACEFUL_STOP: {{ .Values.scenarios.capacityBaseline.gracefulStop | quote }}
   LOADTEST_CAPACITY_BASELINE_THINK_TIME_SECONDS: {{ .Values.scenarios.capacityBaseline.thinkTimeSeconds | quote }}
   LOADTEST_CAPACITY_BASELINE_ACTIVE_CUSTOMER_COUNT: {{ .Values.scenarios.capacityBaseline.activeCustomerCount | quote }}

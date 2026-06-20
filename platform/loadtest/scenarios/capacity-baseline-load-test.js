@@ -75,14 +75,27 @@ function stageId(service, stage) {
   return `${service.replace(/-service$/, '')}_rps_${String(stage.target).replace(/\./g, '_')}`;
 }
 
-function serviceDurationSeconds() {
-  return (config.stages || []).reduce((total, stage) => total + durationSeconds(stage.duration), 0);
+function stagesForService(service) {
+  return (config.serviceStages && config.serviceStages[service]) || config.stages || [];
+}
+
+function serviceDurationSeconds(service) {
+  return stagesForService(service).reduce((total, stage) => total + durationSeconds(stage.duration), 0);
+}
+
+function serviceOffsetSeconds(service) {
+  let offset = 0;
+  for (const activeService of ACTIVE_SERVICE_ORDER) {
+    if (activeService === service) {
+      return offset;
+    }
+    offset += serviceDurationSeconds(activeService) + durationSeconds(config.gracefulStop);
+  }
+  return offset;
 }
 
 function serviceStartTime(service) {
-  const index = ACTIVE_SERVICE_ORDER.indexOf(service);
-  const offset = index * (serviceDurationSeconds() + durationSeconds(config.gracefulStop));
-  return `${offset}s`;
+  return `${serviceOffsetSeconds(service)}s`;
 }
 
 function scenarioForService(service) {
@@ -93,7 +106,7 @@ function scenarioForService(service) {
     timeUnit: config.timeUnit,
     preAllocatedVUs: config.preAllocatedVUs,
     maxVUs: config.maxVUs,
-    stages: config.stages,
+    stages: stagesForService(service),
     gracefulStop: config.gracefulStop,
     tags: {
       environment: config.environment,
@@ -121,7 +134,7 @@ function capacityThresholds() {
     thresholds.loadtest_capacity_resource_observation_success = ['rate>0.99'];
   }
   for (const service of ACTIVE_SERVICE_ORDER) {
-    for (const stage of config.stages || []) {
+    for (const stage of stagesForService(service)) {
       for (const step of SERVICE_STEPS[service]) {
         const tags = thresholdTags(service, step, stage);
         thresholds[`http_req_duration{${tags}}`] = [
@@ -218,24 +231,24 @@ export function setup() {
 }
 
 function stageForService(setupData, service) {
-  const serviceIndex = ACTIVE_SERVICE_ORDER.indexOf(service);
+  const stages = stagesForService(service);
   const elapsedSeconds = Math.max(0, (Date.now() - setupData.measurementStartedAtMs) / 1000);
-  const serviceElapsed = elapsedSeconds - (serviceIndex * (serviceDurationSeconds() + durationSeconds(config.gracefulStop)));
+  const serviceElapsed = elapsedSeconds - serviceOffsetSeconds(service);
   let upperBound = 0;
-  for (let index = 0; index < config.stages.length; index += 1) {
-    upperBound += durationSeconds(config.stages[index].duration);
-    if (serviceElapsed <= upperBound || index === config.stages.length - 1) {
+  for (let index = 0; index < stages.length; index += 1) {
+    upperBound += durationSeconds(stages[index].duration);
+    if (serviceElapsed <= upperBound || index === stages.length - 1) {
       return {
-        ...config.stages[index],
+        ...stages[index],
         index,
-        id: stageId(service, config.stages[index]),
+        id: stageId(service, stages[index]),
       };
     }
   }
   return {
-    ...config.stages[0],
+    ...stages[0],
     index: 0,
-    id: stageId(service, config.stages[0]),
+    id: stageId(service, stages[0]),
   };
 }
 

@@ -60,6 +60,18 @@ scenarios:
         target: 220
       - duration: 90s
         target: 300
+    serviceStages:
+      auth:
+        - duration: 90s
+          target: 20
+        - duration: 90s
+          target: 40
+        - duration: 90s
+          target: 60
+        - duration: 90s
+          target: 80
+        - duration: 90s
+          target: 100
     gracefulStop: 15s
     activeCustomerCount: 500
     concertLimit: 20

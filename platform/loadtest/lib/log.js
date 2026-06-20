@@ -86,6 +86,7 @@ export function experimentConditionFields(config, phase) {
     duration: config.duration,
     service_steps: config.serviceSteps,
     stages: config.stages,
+    service_stages: config.serviceStages,
     graceful_stop: config.gracefulStop,
     think_time_seconds: config.thinkTimeSeconds,
     poll_seconds: config.pollSeconds,

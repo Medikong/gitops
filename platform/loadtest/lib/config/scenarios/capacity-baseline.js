@@ -65,6 +65,54 @@ function parseServiceSteps() {
   });
 }
 
+function normalizeServiceName(value, fieldName) {
+  const normalized = SERVICE_STEP_ALIASES[String(value).trim()];
+  if (!normalized) {
+    throw new Error(`${fieldName} must be one of ${Object.keys(SERVICE_STEP_ALIASES).join(', ')}`);
+  }
+  return normalized;
+}
+
+function parseStageList(name, stages) {
+  if (!Array.isArray(stages)) {
+    throw new Error(`${name} must be a JSON array`);
+  }
+  if (stages.length === 0) {
+    throw new Error(`${name} must not be empty`);
+  }
+  return stages.map((stage, index) => {
+    if (!stage || typeof stage !== 'object') {
+      throw new Error(`${name}[${index}] must be an object`);
+    }
+    const duration = String(stage.duration || '').trim();
+    const target = Number(stage.target);
+    if (!duration) {
+      throw new Error(`${name}[${index}].duration is required`);
+    }
+    if (!Number.isInteger(target) || target < 0) {
+      throw new Error(`${name}[${index}].target must be a non-negative integer`);
+    }
+    return { duration, target };
+  });
+}
+
+function parseServiceStages() {
+  const raw = optional('LOADTEST_CAPACITY_BASELINE_SERVICE_STAGES', '{}');
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`LOADTEST_CAPACITY_BASELINE_SERVICE_STAGES must be a JSON object: ${error.message}`);
+  }
+  if (!value || Array.isArray(value) || typeof value !== 'object') {
+    throw new Error('LOADTEST_CAPACITY_BASELINE_SERVICE_STAGES must be a JSON object');
+  }
+  return Object.fromEntries(Object.entries(value).map(([service, stages]) => [
+    normalizeServiceName(service, `LOADTEST_CAPACITY_BASELINE_SERVICE_STAGES.${service}`),
+    parseStageList(`LOADTEST_CAPACITY_BASELINE_SERVICE_STAGES.${service}`, stages),
+  ]));
+}
+
 function parseResourceTargets() {
   const raw = optional('LOADTEST_CAPACITY_BASELINE_RESOURCE_TARGETS', '[]');
   let targets;
@@ -94,10 +142,12 @@ export function getCapacityBaselineConfig() {
   if (stages.length === 0) {
     throw new Error('LOADTEST_CAPACITY_BASELINE_STAGES is required');
   }
+  const serviceStages = parseServiceStages();
   const vus = positiveInteger('LOADTEST_CAPACITY_BASELINE_VUS', 5);
   const preAllocatedVus = positiveInteger('LOADTEST_CAPACITY_BASELINE_PRE_ALLOCATED_VUS', Math.max(vus, 10));
   const maxVus = positiveInteger('LOADTEST_CAPACITY_BASELINE_MAX_VUS', Math.max(vus, preAllocatedVus));
-  const stageMax = Math.max(0, ...stages.map((stage) => stage.target));
+  const allStages = [stages, ...Object.values(serviceStages)].flat();
+  const stageMax = Math.max(0, ...allStages.map((stage) => stage.target));
 
   return {
     requestPrefix: optional('LOADTEST_CAPACITY_BASELINE_REQUEST_PREFIX', 'loadtest-capacity-baseline'),
@@ -115,6 +165,7 @@ export function getCapacityBaselineConfig() {
     duration: optional('LOADTEST_CAPACITY_BASELINE_DURATION', '1m'),
     serviceSteps: parseServiceSteps(),
     stages,
+    serviceStages,
     gracefulStop: optional('LOADTEST_CAPACITY_BASELINE_GRACEFUL_STOP', '15s'),
     thinkTimeSeconds: nonNegativeNumber('LOADTEST_CAPACITY_BASELINE_THINK_TIME_SECONDS', 0),
     activeCustomerCount: positiveInteger('LOADTEST_CAPACITY_BASELINE_ACTIVE_CUSTOMER_COUNT', 20),

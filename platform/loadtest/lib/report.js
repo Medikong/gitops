@@ -226,6 +226,10 @@ function capacityBaselineStageId(service, stage) {
   return `${service.replace(/-service$/, '')}_rps_${targetLabel}`;
 }
 
+function capacityBaselineStagesForService(config = {}, service) {
+  return (config.serviceStages && config.serviceStages[service]) || config.stages || [];
+}
+
 function capacityBaselineServiceSteps(config = {}) {
   const enabledServices = new Set(config.serviceSteps || []);
   const allSteps = [
@@ -319,6 +323,7 @@ function capacityBaselineServiceSummary(config, rows, service) {
     : validRows.reduce((current, row) => (row.target_rps >= current.target_rps ? row : current), validRows[0]);
   return {
     service,
+    stages: capacityBaselineStagesForService(config, service),
     max_valid_rps: best ? best.target_rps : null,
     cpu_usage_m_at_max_valid_rps: best ? best.cpu_usage_m : null,
     request_candidate_m: best ? best.request_candidate_m : null,
@@ -332,7 +337,7 @@ function capacityBaselineReport(config, data) {
   const metrics = data.metrics || {};
   const stepResults = [];
   for (const serviceConfig of capacityBaselineServiceSteps(config)) {
-    for (const stage of config.stages || []) {
+    for (const stage of capacityBaselineStagesForService(config, serviceConfig.service)) {
       for (const stepConfig of serviceConfig.steps) {
         stepResults.push(capacityBaselineStepResult(
           config,
@@ -355,6 +360,8 @@ function capacityBaselineReport(config, data) {
     seed_row_counts: config.seedRowCounts,
     target_utilization: config.targetUtilization,
     service_steps: config.serviceSteps,
+    default_stages: config.stages,
+    service_stages: config.serviceStages,
     resource_observation_source: config.resourceObservation && config.resourceObservation.source,
     services: capacityBaselineServiceSteps(config).map((row) => capacityBaselineServiceSummary(config, stepResults, row.service)),
     step_results: stepResults,
