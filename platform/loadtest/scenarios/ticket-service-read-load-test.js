@@ -1,4 +1,5 @@
 import http from 'k6/http';
+import crypto from 'k6/crypto';
 import { check, fail, group } from 'k6';
 import { Rate } from 'k6/metrics';
 
@@ -95,7 +96,16 @@ function validateTicketServiceReadConfig(runConfig) {
 }
 
 function ticketReservationId(runConfig, customerIndex, ticketPosition) {
-  return `${runConfig.dataset.revision}-customer-${String(customerIndex + 1).padStart(6, '0')}-ticket-${String(ticketPosition).padStart(6, '0')}`;
+  return datasetUuid(runConfig, 'ticket-reservation', customerIndex + 1, ticketPosition);
+}
+
+function datasetUuid(runConfig, ...parts) {
+  const name = [runConfig.dataset.revision, ...parts.map((part) => String(part))].join(':');
+  const chars = crypto.sha256(name, 'hex').slice(0, 32).split('');
+  chars[12] = '8';
+  chars[16] = ((parseInt(chars[16], 16) & 0x3) | 0x8).toString(16);
+  const value = chars.join('');
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
 }
 
 function issueTicket(runConfig, token, customerId, customerIndex, ticketPosition) {
@@ -108,8 +118,8 @@ function issueTicket(runConfig, token, customerId, customerIndex, ticketPosition
     {
       reservationId,
       userId: customerId,
-      concertId: `${runConfig.dataset.revision}-concert-read-path`,
-      seatId: `${runConfig.dataset.revision}-seat-${String(ticketPosition).padStart(6, '0')}`,
+      concertId: datasetUuid(runConfig, 'ticket-read-concert', 1),
+      seatId: datasetUuid(runConfig, 'ticket-seat', customerIndex + 1, ticketPosition),
     },
     [200],
   );

@@ -1,4 +1,5 @@
 import http from 'k6/http';
+import crypto from 'k6/crypto';
 import exec from 'k6/execution';
 import { check, fail, sleep } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
@@ -231,8 +232,8 @@ export function setup() {
   return {
     measurementStartedAtMs: Date.now(),
     customerTokens,
-    concertId: `${config.dataset.revision}-concert-0001`,
-    performanceId: `${config.dataset.revision}-showtime-0001-0001`,
+    concertId: datasetUuid('concert', 1),
+    performanceId: datasetUuid('showtime', 1, 1),
   };
 }
 
@@ -362,6 +363,15 @@ function valueFrom(body, fields, step) {
 
 function capacityId(prefix, number) {
   return `${config.dataset.revision}-${prefix}-${String(number).padStart(6, '0')}`;
+}
+
+function datasetUuid(...parts) {
+  const name = [config.dataset.revision, ...parts.map((part) => String(part))].join(':');
+  const chars = crypto.sha256(name, 'hex').slice(0, 32).split('');
+  chars[12] = '8';
+  chars[16] = ((parseInt(chars[16], 16) & 0x3) | 0x8).toString(16);
+  const value = chars.join('');
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
 }
 
 function observeResources(runConfig) {

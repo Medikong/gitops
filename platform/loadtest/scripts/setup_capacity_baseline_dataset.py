@@ -43,6 +43,39 @@ def _hash_password(password: str) -> str:
 PASSWORD_HASH = os.getenv("LOADTEST_CAPACITY_BASELINE_PASSWORD_HASH", _hash_password(PASSWORD))
 
 
+def uuid_id(*parts: object) -> str:
+    name = ":".join([REVISION, *(str(part) for part in parts)])
+    digest = bytearray(hashlib.sha256(name.encode("utf-8")).digest()[:16])
+    digest[6] = (digest[6] & 0x0F) | 0x80
+    digest[8] = (digest[8] & 0x3F) | 0x80
+    value = digest.hex()
+    return f"{value[:8]}-{value[8:12]}-{value[12:16]}-{value[16:20]}-{value[20:]}"
+
+
+def concert_id(index: int) -> str:
+    return uuid_id("concert", index)
+
+
+def venue_id(index: int) -> str:
+    return uuid_id("venue", index)
+
+
+def showtime_id(concert_index: int, performance_index: int) -> str:
+    return uuid_id("showtime", concert_index, performance_index)
+
+
+def seat_id(index: int) -> str:
+    return uuid_id("seat", index)
+
+
+def delete_uuid_values(cursor, table: str, column: str, values: list[str], chunk_size: int = 5000):
+    for start in range(0, len(values), chunk_size):
+        cursor.execute(
+            f"delete from {table} where {column} = any(%s::uuid[])",
+            (values[start:start + chunk_size],),
+        )
+
+
 def pg_dsn(env_name: str, fallback: str) -> str:
     dsn = os.getenv(env_name, fallback)
     return dsn.replace("postgresql+psycopg://", "postgresql://")
@@ -213,11 +246,18 @@ def seed_concert(counts: dict):
         require_unique_columns(cursor, "seats", ("showtime_id", "section", "row_label", "number"))
         require_table(cursor, "seat_grades", {"id", "showtime_id", "name", "price", "color"})
         require_unique_columns(cursor, "seat_grades", ("showtime_id", "name"))
-        cursor.execute("delete from seats where id like %s or showtime_id like %s", (f"{REVISION}-seat-%", f"{REVISION}-showtime-%"))
-        cursor.execute("delete from seat_grades where id like %s or showtime_id like %s", (f"{REVISION}-grade-%", f"{REVISION}-showtime-%"))
-        cursor.execute("delete from showtimes where id like %s or concert_id like %s", (f"{REVISION}-showtime-%", f"{REVISION}-concert-%"))
-        cursor.execute("delete from venues where id like %s", (f"{REVISION}-venue-%",))
-        cursor.execute("delete from concerts where id like %s", (f"{REVISION}-concert-%",))
+        concert_ids = [concert_id(index) for index in range(1, concert_count + 1)]
+        venue_ids = [venue_id(index) for index in range(1, concert_count + 1)]
+        showtime_ids = [
+            showtime_id(concert_index, performance_index)
+            for concert_index in range(1, concert_count + 1)
+            for performance_index in range(1, performances_per_concert + 1)
+        ]
+        delete_uuid_values(cursor, "seats", "showtime_id", showtime_ids)
+        delete_uuid_values(cursor, "seat_grades", "showtime_id", showtime_ids)
+        delete_uuid_values(cursor, "showtimes", "id", showtime_ids)
+        delete_uuid_values(cursor, "venues", "id", venue_ids)
+        delete_uuid_values(cursor, "concerts", "id", concert_ids)
 
         venues = []
         concerts = []
@@ -226,11 +266,11 @@ def seed_concert(counts: dict):
         seats = []
         seat_seq = 1
         for concert_index in range(1, concert_count + 1):
-            concert_id = f"{REVISION}-concert-{concert_index:04d}"
-            venue_id = f"{REVISION}-venue-{concert_index:04d}"
-            venues.append((venue_id, f"Capacity Hall {concert_index:04d}", "Loadtest", total_seats_per_performance))
+            current_concert_id = concert_id(concert_index)
+            current_venue_id = venue_id(concert_index)
+            venues.append((current_venue_id, f"Capacity Hall {concert_index:04d}", "Loadtest", total_seats_per_performance))
             concerts.append((
-                concert_id,
+                current_concert_id,
                 str(PROVIDER_ID),
                 f"Capacity Baseline Concert {concert_index:04d}",
                 "Loadtest concert",
@@ -246,20 +286,20 @@ def seed_concert(counts: dict):
                 None,
             ))
             for performance_index in range(1, performances_per_concert + 1):
-                showtime_id = f"{REVISION}-showtime-{concert_index:04d}-{performance_index:04d}"
+                current_showtime_id = showtime_id(concert_index, performance_index)
                 starts_at = base_date + timedelta(days=concert_index - 1, hours=performance_index - 1)
-                showtimes.append((showtime_id, concert_id, venue_id, starts_at, starts_at + timedelta(hours=2), "open"))
+                showtimes.append((current_showtime_id, current_concert_id, current_venue_id, starts_at, starts_at + timedelta(hours=2), "open"))
                 for grade_index, (grade_name, price, color) in enumerate((
                     ("VIP", 150000, "#d97706"),
                     ("R", 120000, "#2563eb"),
                     ("S", 90000, "#16a34a"),
                     ("A", 60000, "#7c3aed"),
                 ), start=1):
-                    grades.append((f"{REVISION}-grade-{concert_index:04d}-{performance_index:04d}-{grade_index}", showtime_id, grade_name, price, color))
+                    grades.append((uuid_id("grade", concert_index, performance_index, grade_index), current_showtime_id, grade_name, price, color))
                 for row in range(1, seat_rows + 1):
                     for number in range(1, seats_per_row + 1):
                         section = chr(ord("A") + ((row - 1) % 4))
-                        seats.append((f"{REVISION}-seat-{seat_seq:06d}", showtime_id, section, f"{row}", f"{number}", "sellable"))
+                        seats.append((seat_id(seat_seq), current_showtime_id, section, f"{row}", f"{number}", "sellable"))
                         seat_seq += 1
         copy_rows(cursor, "venues", ("id", "name", "address", "total_seats"), venues)
         copy_rows(
@@ -271,10 +311,10 @@ def seed_concert(counts: dict):
         copy_rows(cursor, "showtimes", ("id", "concert_id", "venue_id", "starts_at", "ends_at", "status"), showtimes)
         copy_rows(cursor, "seat_grades", ("id", "showtime_id", "name", "price", "color"), grades)
         copy_rows(cursor, "seats", ("id", "showtime_id", "section", "row_label", "number", "status"), seats)
-        counts["concert.concerts"] = expect_count("concert.concerts", row_count(cursor, "select count(*) from concerts where id like %s", (f"{REVISION}-concert-%",)), concert_count)
-        counts["concert.showtimes"] = expect_count("concert.showtimes", row_count(cursor, "select count(*) from showtimes where id like %s", (f"{REVISION}-showtime-%",)), concert_count * performances_per_concert)
-        counts["concert.seats"] = expect_count("concert.seats", row_count(cursor, "select count(*) from seats where id like %s", (f"{REVISION}-seat-%",)), len(seats))
-        counts["concert.seat_grades"] = expect_count("concert.seat_grades", row_count(cursor, "select count(*) from seat_grades where id like %s", (f"{REVISION}-grade-%",)), len(grades))
+        counts["concert.concerts"] = expect_count("concert.concerts", row_count(cursor, "select count(*) from concerts where id = any(%s::uuid[])", (concert_ids,)), concert_count)
+        counts["concert.showtimes"] = expect_count("concert.showtimes", row_count(cursor, "select count(*) from showtimes where id = any(%s::uuid[])", (showtime_ids,)), concert_count * performances_per_concert)
+        counts["concert.seats"] = expect_count("concert.seats", row_count(cursor, "select count(*) from seats where showtime_id = any(%s::uuid[])", (showtime_ids,)), len(seats))
+        counts["concert.seat_grades"] = expect_count("concert.seat_grades", row_count(cursor, "select count(*) from seat_grades where showtime_id = any(%s::uuid[])", (showtime_ids,)), len(grades))
 
 
 def seed_reservation(counts: dict):
@@ -293,29 +333,12 @@ def seed_reservation(counts: dict):
         require_table(cursor, "traffic_policies", {"concert_id", "macro_protection_enabled", "max_requests_per_user_per_minute", "block_suspicious_traffic"})
         require_table(cursor, "reservations", {"id", "user_id", "concert_id", "showtime_id", "performance_id", "seat_id", "status", "active_seat_key", "expires_at", "created_at", "updated_at"})
         require_unique_columns(cursor, "reservations", ("active_seat_key",))
-        cursor.execute(
-            """
-            delete from reservations
-            where id like %s
-               or concert_id like %s
-               or showtime_id like %s
-               or performance_id like %s
-               or seat_id like %s
-               or active_seat_key like %s
-            """,
-            (
-                f"{REVISION}-%",
-                f"{REVISION}-concert-%",
-                f"{REVISION}-showtime-%",
-                f"{REVISION}-showtime-%",
-                f"{REVISION}-%",
-                f"{REVISION}-%",
-            ),
-        )
-        cursor.execute("delete from sales_states where concert_id like %s", (f"{REVISION}-concert-%",))
-        cursor.execute("delete from queue_policies where concert_id like %s", (f"{REVISION}-concert-%",))
-        cursor.execute("delete from traffic_policies where concert_id like %s", (f"{REVISION}-concert-%",))
-        sales = [(f"{REVISION}-concert-{index:04d}", "open", total_seats, now) for index in range(1, concert_count + 1)]
+        concert_ids = [concert_id(index) for index in range(1, concert_count + 1)]
+        delete_uuid_values(cursor, "reservations", "concert_id", concert_ids)
+        delete_uuid_values(cursor, "sales_states", "concert_id", concert_ids)
+        delete_uuid_values(cursor, "queue_policies", "concert_id", concert_ids)
+        delete_uuid_values(cursor, "traffic_policies", "concert_id", concert_ids)
+        sales = [(concert_id(index), "open", total_seats, now) for index in range(1, concert_count + 1)]
         execute_values(cursor, "insert into sales_states (concert_id, sales_status, total_seats, updated_at) values %s on conflict (concert_id) do update set sales_status = excluded.sales_status, total_seats = excluded.total_seats, updated_at = excluded.updated_at", sales)
         execute_values(cursor, "insert into queue_policies (concert_id, enabled, max_entrants_per_minute, waiting_room_url) values %s on conflict (concert_id) do update set enabled = excluded.enabled, max_entrants_per_minute = excluded.max_entrants_per_minute", [(row[0], False, None, None) for row in sales])
         execute_values(cursor, "insert into traffic_policies (concert_id, macro_protection_enabled, max_requests_per_user_per_minute, block_suspicious_traffic) values %s on conflict (concert_id) do update set macro_protection_enabled = excluded.macro_protection_enabled, max_requests_per_user_per_minute = excluded.max_requests_per_user_per_minute, block_suspicious_traffic = excluded.block_suspicious_traffic", [(row[0], False, None, False) for row in sales])
@@ -329,14 +352,15 @@ def seed_reservation(counts: dict):
                 status = "expired"
             concert_index = ((index - 1) % concert_count) + 1
             performance_index = ((index - 1) % performances_per_concert) + 1
-            showtime_id = f"{REVISION}-showtime-{concert_index:04d}-{performance_index:04d}"
+            current_showtime_id = showtime_id(concert_index, performance_index)
+            current_seat_id = uuid_id("history-seat", index)
             reservations.append((
-                f"{REVISION}-reservation-history-{index:06d}",
+                uuid_id("reservation-history", index),
                 str(CUSTOMER_ID_BASE + ((index - 1) % CUSTOMER_COUNT) + 1),
-                f"{REVISION}-concert-{concert_index:04d}",
-                showtime_id,
-                showtime_id,
-                f"{REVISION}-history-seat-{index:06d}",
+                concert_id(concert_index),
+                current_showtime_id,
+                current_showtime_id,
+                current_seat_id,
                 status,
                 None,
                 now - timedelta(days=1),
@@ -344,23 +368,27 @@ def seed_reservation(counts: dict):
                 now - timedelta(days=index % 180),
             ))
         for index in range(1, payment_pool + 1):
+            payment_seat_id = uuid_id("payment-seat", index)
+            first_showtime_id = showtime_id(1, 1)
             reservations.append((
-                f"{REVISION}-pending-reservation-{index:06d}",
+                uuid_id("pending-reservation", index),
                 str(CUSTOMER_ID_BASE + ((index - 1) % CUSTOMER_COUNT) + 1),
-                f"{REVISION}-concert-0001",
-                f"{REVISION}-showtime-0001-0001",
-                f"{REVISION}-showtime-0001-0001",
-                f"{REVISION}-payment-seat-{index:06d}",
+                concert_id(1),
+                first_showtime_id,
+                first_showtime_id,
+                payment_seat_id,
                 "pending",
-                f"{REVISION}-payment-seat-{index:06d}",
+                payment_seat_id,
                 now + timedelta(minutes=30),
                 now,
                 now,
             ))
         copy_rows(cursor, "reservations", ("id", "user_id", "concert_id", "showtime_id", "performance_id", "seat_id", "status", "active_seat_key", "expires_at", "created_at", "updated_at"), reservations)
-        counts["reservation.sales_states"] = expect_count("reservation.sales_states", row_count(cursor, "select count(*) from sales_states where concert_id like %s", (f"{REVISION}-concert-%",)), concert_count)
-        counts["reservation.history"] = expect_count("reservation.history", row_count(cursor, "select count(*) from reservations where id like %s", (f"{REVISION}-reservation-history-%",)), reservation_history_count)
-        counts["reservation.pending_pool"] = expect_count("reservation.pending_pool", row_count(cursor, "select count(*) from reservations where id like %s", (f"{REVISION}-pending-reservation-%",)), payment_pool)
+        history_ids = [uuid_id("reservation-history", index) for index in range(1, reservation_history_count + 1)]
+        pending_ids = [uuid_id("pending-reservation", index) for index in range(1, payment_pool + 1)]
+        counts["reservation.sales_states"] = expect_count("reservation.sales_states", row_count(cursor, "select count(*) from sales_states where concert_id = any(%s::uuid[])", (concert_ids,)), concert_count)
+        counts["reservation.history"] = expect_count("reservation.history", row_count(cursor, "select count(*) from reservations where id = any(%s::uuid[])", (history_ids,)), reservation_history_count)
+        counts["reservation.pending_pool"] = expect_count("reservation.pending_pool", row_count(cursor, "select count(*) from reservations where id = any(%s::uuid[])", (pending_ids,)), payment_pool)
 
 
 def seed_payment(counts: dict):
@@ -372,34 +400,23 @@ def seed_payment(counts: dict):
         require_table(cursor, "payments", {"id", "reservation_id", "concert_id", "user_id", "amount", "method", "status", "idempotency_key", "approved_at", "created_at"})
         require_table(cursor, "payment_events", {"id", "event_type", "payment_id", "payload", "trace_context", "publish_status", "published_at", "publish_attempts", "last_publish_error", "created_at"})
         require_unique_columns(cursor, "payments", ("user_id", "idempotency_key"))
-        cursor.execute(
-            """
-            delete from payments
-            where id like %s
-               or reservation_id like %s
-               or concert_id like %s
-               or idempotency_key like %s
-            """,
-            (
-                f"{REVISION}-payment-%",
-                f"{REVISION}-%",
-                f"{REVISION}-concert-%",
-                f"{REVISION}-payment-idempotency-%",
-            ),
-        )
-        cursor.execute("delete from payment_events where id like %s or payment_id like %s", (f"{REVISION}-payment-event-%", f"{REVISION}-payment-%"))
+        payment_ids = [uuid_id("payment", index) for index in range(1, payment_count + 1)]
+        event_ids = [uuid_id("payment-event", index) for index in range(1, payment_count + 1)]
+        delete_uuid_values(cursor, "payment_events", "id", event_ids)
+        delete_uuid_values(cursor, "payments", "id", payment_ids)
         payments = []
         events = []
         for index in range(1, payment_count + 1):
             status = "approved" if index <= approved_count else "failed"
-            payment_id = f"{REVISION}-payment-{index:06d}"
-            reservation_id = f"{REVISION}-payment-history-reservation-{index:06d}"
-            concert_id = f"{REVISION}-concert-{((index - 1) % env_int('LOADTEST_DATASET_CONCERTS', 270)) + 1:04d}"
+            current_payment_id = uuid_id("payment", index)
+            current_event_id = uuid_id("payment-event", index)
+            reservation_id = uuid_id("payment-history-reservation", index)
+            current_concert_id = concert_id(((index - 1) % env_int("LOADTEST_DATASET_CONCERTS", 270)) + 1)
             user_id = str(CUSTOMER_ID_BASE + ((index - 1) % CUSTOMER_COUNT) + 1)
             payments.append((
-                payment_id,
+                current_payment_id,
                 reservation_id,
-                concert_id,
+                current_concert_id,
                 user_id,
                 PAYMENT_AMOUNT,
                 "CARD",
@@ -409,10 +426,17 @@ def seed_payment(counts: dict):
                 now,
             ))
             events.append((
-                f"{REVISION}-payment-event-{index:06d}",
+                current_event_id,
                 "payment-approved" if status == "approved" else "payment-failed",
-                payment_id,
-                {"reservationId": reservation_id, "paymentId": payment_id, "status": status},
+                current_payment_id,
+                {
+                    "eventId": current_event_id,
+                    "reservationId": reservation_id,
+                    "paymentId": current_payment_id,
+                    "concertId": current_concert_id,
+                    "sourceId": current_payment_id,
+                    "status": status,
+                },
                 None,
                 "published",
                 now,
@@ -422,8 +446,8 @@ def seed_payment(counts: dict):
             ))
         copy_rows(cursor, "payments", ("id", "reservation_id", "concert_id", "user_id", "amount", "method", "status", "idempotency_key", "approved_at", "created_at"), payments)
         copy_rows(cursor, "payment_events", ("id", "event_type", "payment_id", "payload", "trace_context", "publish_status", "published_at", "publish_attempts", "last_publish_error", "created_at"), events)
-        counts["payment.payments"] = expect_count("payment.payments", row_count(cursor, "select count(*) from payments where id like %s", (f"{REVISION}-payment-%",)), payment_count)
-        counts["payment.payment_events"] = expect_count("payment.payment_events", row_count(cursor, "select count(*) from payment_events where id like %s", (f"{REVISION}-payment-event-%",)), payment_count)
+        counts["payment.payments"] = expect_count("payment.payments", row_count(cursor, "select count(*) from payments where id = any(%s::uuid[])", (payment_ids,)), payment_count)
+        counts["payment.payment_events"] = expect_count("payment.payment_events", row_count(cursor, "select count(*) from payment_events where id = any(%s::uuid[])", (event_ids,)), payment_count)
 
 
 def seed_ticket(counts: dict):
@@ -441,6 +465,7 @@ def seed_ticket(counts: dict):
                or seat_id like %s
                or reservation_id like %s
                or seat_id like %s
+               or qr_url like %s
             """,
             (
                 f"{REVISION}-ticket-reservation-%",
@@ -448,22 +473,23 @@ def seed_ticket(counts: dict):
                 f"{REVISION}-ticket-seat-%",
                 f"{REVISION}-paid-reservation-%",
                 f"{REVISION}-ticket-issue-seat-%",
+                f"https://tickets.local/{REVISION}/%",
             ),
         )
         rows = []
         for index in range(1, ticket_count + 1):
             rows.append((
-                f"{REVISION}-ticket-reservation-{index:06d}",
+                uuid_id("ticket-reservation", index),
                 str(CUSTOMER_ID_BASE + ((index - 1) % CUSTOMER_COUNT) + 1),
-                f"{REVISION}-concert-{((index - 1) % env_int('LOADTEST_DATASET_CONCERTS', 270)) + 1:04d}",
-                f"{REVISION}-ticket-seat-{index:06d}",
+                concert_id(((index - 1) % env_int("LOADTEST_DATASET_CONCERTS", 270)) + 1),
+                uuid_id("ticket-seat", index),
                 "ISSUED",
                 f"https://tickets.local/{REVISION}/{index}.png",
                 f"https://tickets.local/{REVISION}/{index}.pdf",
                 now,
             ))
         copy_rows(cursor, "tickets", ("reservation_id", "user_id", "concert_id", "seat_id", "status", "qr_url", "pdf_url", "issued_at"), rows)
-        counts["ticket.tickets"] = expect_count("ticket.tickets", row_count(cursor, "select count(*) from tickets where reservation_id like %s", (f"{REVISION}-ticket-reservation-%",)), len(rows))
+        counts["ticket.tickets"] = expect_count("ticket.tickets", row_count(cursor, "select count(*) from tickets where qr_url like %s", (f"https://tickets.local/{REVISION}/%",)), len(rows))
 
 
 def seed_notification(counts: dict):
