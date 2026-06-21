@@ -25,6 +25,7 @@ container:
   env:
     - name: DATABASE_URL
       value: postgresql+psycopg://user:password@concert-db:5432/concert_db
+  apiEnv:
     - name: UVICORN_WORKERS
       value: "2"
 
