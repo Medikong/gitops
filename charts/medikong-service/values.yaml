@@ -40,6 +40,7 @@ container:
   name: ""
   port: 8080
   env: []
+  apiEnv: []
   envFrom: []
   resources:
     requests:
@@ -60,6 +61,8 @@ container:
       port: http
     initialDelaySeconds: 15
     periodSeconds: 20
+
+workers: []
 
 database:
   sqlalchemy:

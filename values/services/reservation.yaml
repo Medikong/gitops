@@ -46,6 +46,17 @@ container:
       value: reservation-created
     - name: RESERVATION_EXPIRED_TOPIC
       value: reservation-expired
+    - name: TICKET_ISSUED_TOPIC
+      value: ticket-issued
+  apiEnv:
+    - name: UVICORN_WORKERS
+      value: "2"
+
+workers:
+  - name: background
+    replicas: 1
+    command: ["python"]
+    args: ["cmd/worker/main.py"]
 
 service:
   port: 8083
