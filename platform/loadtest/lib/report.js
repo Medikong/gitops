@@ -347,6 +347,177 @@ function capacityBaselineStepResult(config, metrics, service, step, api, stage) 
   };
 }
 
+function stageRole(stage, index) {
+  const explicitRole = stage && (stage.stageRole || stage.stage_role);
+  if (explicitRole) {
+    return String(explicitRole);
+  }
+  return ['warmup', 'baseline', 'spike', 'overload', 'cooldown'][index] || `stage_${index + 1}`;
+}
+
+function serviceHpaSpikeStepStageId(service, step, stage, index) {
+  const target = Number(stage && stage.target);
+  const targetLabel = Number.isFinite(target) ? String(target).replace(/\./g, '_') : 'unknown';
+  const role = stageRole(stage, index).replace(/[^a-zA-Z0-9_]+/g, '_').toLowerCase();
+  if (service !== 'concert-service') {
+    return `${service.replace(/-service$/, '')}_${role}_rps_${targetLabel}`;
+  }
+  const concertStepPrefixes = {
+    'capacity_baseline.concert.recommended': 'concert_recommended',
+    'capacity_baseline.concert.detail': 'concert_detail',
+    'capacity_baseline.concert.calendar': 'concert_calendar',
+    'capacity_baseline.concert.date_performances': 'concert_date_performances',
+    'capacity_baseline.concert.seat_map': 'concert_seat_map',
+  };
+  return `${concertStepPrefixes[step] || 'concert'}_${role}_rps_${targetLabel}`;
+}
+
+function serviceHpaSpikeStepResult(config, metrics, service, step, api, stage, index) {
+  const role = stageRole(stage, index);
+  const capacityStep = serviceHpaSpikeStepStageId(service, step, stage, index);
+  const metricTags = { capacity_step: capacityStep, measured_service: service, stage_role: role, step };
+  const serviceTags = { capacity_step: capacityStep, measured_service: service, stage_role: role };
+  const p95 = metricValue(metrics, metricNameWithTags('http_req_duration', metricTags), 'p(95)');
+  const p99 = metricValue(metrics, metricNameWithTags('http_req_duration', metricTags), 'p(99)');
+  const errorRate = metricValue(metrics, metricNameWithTags('http_req_failed', metricTags), 'rate');
+  const checksRate = metricValue(metrics, metricNameWithTags('checks', metricTags), 'rate');
+  const httpReqsCount = metricValue(metrics, metricNameWithTags('http_reqs', metricTags), 'count');
+  const httpReqsRate = metricValue(metrics, metricNameWithTags('http_reqs', metricTags), 'rate');
+  const cpuUsage = metricValue(metrics, metricNameWithTags('loadtest_capacity_cpu_usage_m', serviceTags), 'avg');
+  const throttling = metricValue(metrics, metricNameWithTags('loadtest_capacity_cpu_throttling_ratio', serviceTags), 'avg');
+  const sloP95Ms = Number((config.endpointSloP95Ms || {})[step] || config.thresholds.httpReqDurationP95Ms);
+  const reasons = [];
+  if (role !== 'warmup') {
+    if (p95 !== null && p95 >= sloP95Ms) {
+      reasons.push('slo_p95_ms');
+    }
+    if (p99 !== null && p99 >= config.thresholds.httpReqDurationP99Ms) {
+      reasons.push('slo_p99_ms');
+    }
+    if (errorRate !== null && errorRate >= config.thresholds.httpReqFailedRate) {
+      reasons.push('error_rate_threshold');
+    }
+    if (checksRate !== null && checksRate <= config.thresholds.checksRate) {
+      reasons.push('checks_rate_threshold');
+    }
+  }
+  return {
+    service,
+    api,
+    step,
+    stage: capacityStep,
+    stage_role: role,
+    warmup_excluded: role === 'warmup',
+    target_rps: Number(stage.target),
+    duration: stage.duration,
+    slo_p95_ms: sloP95Ms,
+    p95_ms: p95,
+    p99_ms: p99,
+    error_rate: errorRate,
+    checks_pass_rate: checksRate,
+    http_reqs_count: httpReqsCount,
+    http_reqs_rate: httpReqsRate,
+    rps: httpReqsRate,
+    cpu_usage_m: cpuUsage,
+    cpu_throttling: throttling,
+    status: role === 'warmup' ? 'excluded' : reasons.length === 0 ? 'ok' : 'limit_candidate',
+    decision_reasons: reasons,
+  };
+}
+
+function serviceHpaSpikeRecoveryObservations(rows) {
+  return rows
+    .filter((row) => row.stage_role === 'cooldown')
+    .map((row) => ({
+      service: row.service,
+      step: row.step,
+      stage: row.stage,
+      target_rps: row.target_rps,
+      p95_ms: row.p95_ms,
+      p99_ms: row.p99_ms,
+      error_rate: row.error_rate,
+      checks_pass_rate: row.checks_pass_rate,
+      recovered_within_thresholds: row.decision_reasons.length === 0,
+      interpretation: 'recovery_observation_only_not_scale_down_confirmation',
+    }));
+}
+
+function serviceHpaSpikeReport(config, data, serviceFilter = null) {
+  const metrics = data.metrics || {};
+  const stageResults = [];
+  const serviceConfigs = capacityBaselineServiceSteps(config)
+    .filter((serviceConfig) => serviceFilter === null || serviceConfig.service === serviceFilter);
+  for (const serviceConfig of serviceConfigs) {
+    capacityBaselineStagesForService(config, serviceConfig.service).forEach((stage, index) => {
+      for (const stepConfig of serviceConfig.steps) {
+        stageResults.push(serviceHpaSpikeStepResult(
+          config,
+          metrics,
+          serviceConfig.service,
+          stepConfig.step,
+          stepConfig.api,
+          stage,
+          index,
+        ));
+      }
+    });
+  }
+  const firstLimitCandidate = stageResults.find((row) => (
+    row.stage_role !== 'warmup' && row.decision_reasons.length > 0
+  )) || null;
+  const scaleOut = scaleOutResults(config, metrics);
+  return {
+    report_type: 'service_hpa_spike',
+    scenario: config.scenario,
+    traffic_model_preset: (config.trafficModel || {}).preset,
+    dataset_revision: config.dataset && config.dataset.revision,
+    seed_method: config.seedMethod,
+    service_steps: config.serviceSteps,
+    default_stages: config.stages,
+    service_stages: config.serviceStages,
+    stage_contract: {
+      order: ['warmup', 'baseline', 'spike', 'overload', 'cooldown'],
+      warmup: 'excluded_from_decision',
+      cooldown: 'recovery_observation_only_not_scale_down_confirmation',
+    },
+    resource_observation_source: config.resourceObservation && config.resourceObservation.source,
+    scale_out_results: scaleOut,
+    service_hpa_results: scaleOut,
+    stage_results: stageResults,
+    first_limit_candidate: firstLimitCandidate,
+    recovery_observations: serviceHpaSpikeRecoveryObservations(stageResults),
+  };
+}
+
+function serviceHpaSpikeRunReport(config, data, reportPhase = 'final', service = null) {
+  const result = reportSummary(config, data);
+  return {
+    event: 'loadtest_run_report',
+    timestamp: new Date().toISOString(),
+    test_type: 'loadtest',
+    loadtest_run_id: config.runId,
+    scenario: config.scenario,
+    report_phase: reportPhase,
+    measured_service: service,
+    environment: config.environment,
+    target: config.target,
+    target_base_url: config.baseUrl,
+    status: result.status,
+    execution_conditions: experimentConditionFields(config, 'summary'),
+    scenario_report: serviceHpaSpikeReport(config, data, service),
+  };
+}
+
+function serviceHpaSpikeRunReports(config, data) {
+  const serviceReports = capacityBaselineServiceSteps(config).map((serviceConfig) => (
+    serviceHpaSpikeRunReport(config, data, 'service_step_complete', serviceConfig.service)
+  ));
+  return [
+    ...serviceReports,
+    serviceHpaSpikeRunReport(config, data, 'final', null),
+  ];
+}
+
 function capacityBaselineServiceSummary(config, rows, service) {
   const serviceRows = rows.filter((row) => row.service === service);
   const stepCount = capacityBaselineServiceSteps(config).find((row) => row.service === service)?.steps.length || 0;
@@ -713,6 +884,28 @@ export function summaryOutput(config, data) {
 
 export function capacityBaselineSummaryOutput(config, data) {
   const reports = capacityBaselineRunReports(config, data);
+  const output = {
+    stdout: `${reports.map((report) => JSON.stringify(report)).join('\n')}\n`,
+  };
+  if (!config.reportDir) {
+    return output;
+  }
+  const files = {
+    [`${config.reportDir}/metadata.json`]: JSON.stringify(metadata(config), null, 2),
+    [`${config.reportDir}/k6-summary.json`]: JSON.stringify(data, null, 2),
+  };
+  for (const report of reports) {
+    const suffix = report.report_phase === 'final' ? 'final' : report.measured_service;
+    files[`${config.reportDir}/loadtest-run-report-${suffix}.json`] = JSON.stringify(report, null, 2);
+  }
+  return {
+    ...output,
+    ...files,
+  };
+}
+
+export function serviceHpaSpikeSummaryOutput(config, data) {
+  const reports = serviceHpaSpikeRunReports(config, data);
   const output = {
     stdout: `${reports.map((report) => JSON.stringify(report)).join('\n')}\n`,
   };

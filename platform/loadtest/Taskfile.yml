@@ -225,7 +225,7 @@ tasks:
         disable_kong_rate_limit="${LOADTEST_DISABLE_KONG_RATE_LIMIT:-}"
         if [ -z "${disable_kong_rate_limit}" ]; then
           case "${scenario}" in
-            reservation-journey-load-test|reservation-create-load-test|reservation-seat-contention-load-test|ticket-service-read-load-test|capacity-baseline-load-test)
+            reservation-journey-load-test|reservation-create-load-test|reservation-seat-contention-load-test|ticket-service-read-load-test|capacity-baseline-load-test|service-hpa-spike-load-test)
               disable_kong_rate_limit="true"
               ;;
           esac

@@ -4,7 +4,6 @@ import {
   positiveInteger,
   positiveNumber,
   rate,
-  parseStages,
   parseStringArray,
 } from '../env.js';
 
@@ -46,8 +45,13 @@ function parseJsonObject(name, fallback) {
   return value;
 }
 
-function parseServiceSteps() {
-  const values = parseStringArray('LOADTEST_CAPACITY_BASELINE_SERVICE_STEPS');
+function envName(prefix, suffix) {
+  return `${prefix}_${suffix}`;
+}
+
+function parseServiceSteps(prefix) {
+  const name = envName(prefix, 'SERVICE_STEPS');
+  const values = parseStringArray(name);
   if (values.length === 0) {
     return DEFAULT_SERVICE_STEPS;
   }
@@ -55,10 +59,10 @@ function parseServiceSteps() {
   return values.map((value, index) => {
     const normalized = SERVICE_STEP_ALIASES[String(value).trim()];
     if (!normalized) {
-      throw new Error(`LOADTEST_CAPACITY_BASELINE_SERVICE_STEPS[${index}] must be one of ${Object.keys(SERVICE_STEP_ALIASES).join(', ')}`);
+      throw new Error(`${name}[${index}] must be one of ${Object.keys(SERVICE_STEP_ALIASES).join(', ')}`);
     }
     if (seen.has(normalized)) {
-      throw new Error(`LOADTEST_CAPACITY_BASELINE_SERVICE_STEPS contains duplicate service step: ${value}`);
+      throw new Error(`${name} contains duplicate service step: ${value}`);
     }
     seen.add(normalized);
     return normalized;
@@ -92,41 +96,58 @@ function parseStageList(name, stages) {
     if (!Number.isInteger(target) || target < 0) {
       throw new Error(`${name}[${index}].target must be a non-negative integer`);
     }
-    return { duration, target };
+    return {
+      duration,
+      target,
+      stageRole: stage.stageRole ? String(stage.stageRole) : stage.stage_role ? String(stage.stage_role) : undefined,
+    };
   });
 }
 
-function parseServiceStages() {
-  const raw = optional('LOADTEST_CAPACITY_BASELINE_SERVICE_STAGES', '{}');
+function parseStagesFromEnv(name) {
+  const raw = optional(name, '[]');
+  let stages;
+  try {
+    stages = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`${name} must be a JSON array: ${error.message}`);
+  }
+  return parseStageList(name, stages);
+}
+
+function parseServiceStages(prefix) {
+  const name = envName(prefix, 'SERVICE_STAGES');
+  const raw = optional(name, '{}');
   let value;
   try {
     value = JSON.parse(raw);
   } catch (error) {
-    throw new Error(`LOADTEST_CAPACITY_BASELINE_SERVICE_STAGES must be a JSON object: ${error.message}`);
+    throw new Error(`${name} must be a JSON object: ${error.message}`);
   }
   if (!value || Array.isArray(value) || typeof value !== 'object') {
-    throw new Error('LOADTEST_CAPACITY_BASELINE_SERVICE_STAGES must be a JSON object');
+    throw new Error(`${name} must be a JSON object`);
   }
   return Object.fromEntries(Object.entries(value).map(([service, stages]) => [
-    normalizeServiceName(service, `LOADTEST_CAPACITY_BASELINE_SERVICE_STAGES.${service}`),
-    parseStageList(`LOADTEST_CAPACITY_BASELINE_SERVICE_STAGES.${service}`, stages),
+    normalizeServiceName(service, `${name}.${service}`),
+    parseStageList(`${name}.${service}`, stages),
   ]));
 }
 
-function parseResourceTargets() {
-  const raw = optional('LOADTEST_CAPACITY_BASELINE_RESOURCE_TARGETS', '[]');
+function parseResourceTargets(prefix) {
+  const name = envName(prefix, 'RESOURCE_TARGETS');
+  const raw = optional(name, '[]');
   let targets;
   try {
     targets = JSON.parse(raw);
   } catch (error) {
-    throw new Error(`LOADTEST_CAPACITY_BASELINE_RESOURCE_TARGETS must be JSON: ${error.message}`);
+    throw new Error(`${name} must be JSON: ${error.message}`);
   }
   if (!Array.isArray(targets)) {
-    throw new Error('LOADTEST_CAPACITY_BASELINE_RESOURCE_TARGETS must be a JSON array');
+    throw new Error(`${name} must be a JSON array`);
   }
   return targets.map((target, index) => {
     if (!target || !target.service || !target.namespace || !target.podSelector) {
-      throw new Error(`LOADTEST_CAPACITY_BASELINE_RESOURCE_TARGETS[${index}] requires service, namespace, podSelector`);
+      throw new Error(`${name}[${index}] requires service, namespace, podSelector`);
     }
     return {
       service: String(target.service),
@@ -137,63 +158,71 @@ function parseResourceTargets() {
   });
 }
 
-export function getCapacityBaselineConfig() {
-  const stages = parseStages('LOADTEST_CAPACITY_BASELINE_STAGES');
+export function getCapacityLikeServiceConfig({
+  envPrefix = 'LOADTEST_CAPACITY_BASELINE',
+  requestPrefixDefault = 'loadtest-capacity-baseline',
+  stepPrefix = 'capacity_baseline',
+  reportType = 'capacity_baseline',
+  stageIdMode = 'target',
+} = {}) {
+  const stages = parseStagesFromEnv(envName(envPrefix, 'STAGES'));
   if (stages.length === 0) {
-    throw new Error('LOADTEST_CAPACITY_BASELINE_STAGES is required');
+    throw new Error(`${envName(envPrefix, 'STAGES')} is required`);
   }
-  const serviceStages = parseServiceStages();
-  const vus = positiveInteger('LOADTEST_CAPACITY_BASELINE_VUS', 5);
-  const preAllocatedVus = positiveInteger('LOADTEST_CAPACITY_BASELINE_PRE_ALLOCATED_VUS', Math.max(vus, 10));
-  const maxVus = positiveInteger('LOADTEST_CAPACITY_BASELINE_MAX_VUS', Math.max(vus, preAllocatedVus));
+  const serviceStages = parseServiceStages(envPrefix);
+  const vus = positiveInteger(envName(envPrefix, 'VUS'), 5);
+  const preAllocatedVus = positiveInteger(envName(envPrefix, 'PRE_ALLOCATED_VUS'), Math.max(vus, 10));
+  const maxVus = positiveInteger(envName(envPrefix, 'MAX_VUS'), Math.max(vus, preAllocatedVus));
   const allStages = [stages, ...Object.values(serviceStages)].flat();
   const stageMax = Math.max(0, ...allStages.map((stage) => stage.target));
 
   return {
-    requestPrefix: optional('LOADTEST_CAPACITY_BASELINE_REQUEST_PREFIX', 'loadtest-capacity-baseline'),
+    requestPrefix: optional(envName(envPrefix, 'REQUEST_PREFIX'), requestPrefixDefault),
     requestIdBase: '',
-    stepPrefix: 'capacity_baseline',
+    stepPrefix,
+    reportType,
+    stageIdMode,
     executor: 'ramping-arrival-rate',
-    timeoutSeconds: positiveNumber('LOADTEST_CAPACITY_BASELINE_TIMEOUT_SECONDS', 10),
-    setupTimeout: optional('LOADTEST_CAPACITY_BASELINE_SETUP_TIMEOUT', '5m'),
+    timeoutSeconds: positiveNumber(envName(envPrefix, 'TIMEOUT_SECONDS'), 10),
+    setupTimeout: optional(envName(envPrefix, 'SETUP_TIMEOUT'), '5m'),
     vus,
-    rate: positiveInteger('LOADTEST_CAPACITY_BASELINE_RATE', 1),
-    timeUnit: optional('LOADTEST_CAPACITY_BASELINE_TIME_UNIT', '1s'),
+    rate: positiveInteger(envName(envPrefix, 'RATE'), 1),
+    timeUnit: optional(envName(envPrefix, 'TIME_UNIT'), '1s'),
     preAllocatedVUs: preAllocatedVus,
     maxVUs: maxVus,
     plannedMaxVus: Math.max(vus, maxVus, preAllocatedVus, stageMax),
-    duration: optional('LOADTEST_CAPACITY_BASELINE_DURATION', '1m'),
-    serviceSteps: parseServiceSteps(),
+    duration: optional(envName(envPrefix, 'DURATION'), '1m'),
+    serviceSteps: parseServiceSteps(envPrefix),
     stages,
     serviceStages,
-    gracefulStop: optional('LOADTEST_CAPACITY_BASELINE_GRACEFUL_STOP', '15s'),
-    thinkTimeSeconds: nonNegativeNumber('LOADTEST_CAPACITY_BASELINE_THINK_TIME_SECONDS', 0),
-    activeCustomerCount: positiveInteger('LOADTEST_CAPACITY_BASELINE_ACTIVE_CUSTOMER_COUNT', 20),
-    concertLimit: positiveInteger('LOADTEST_CAPACITY_BASELINE_CONCERT_LIMIT', 50),
-    performanceLimit: positiveInteger('LOADTEST_CAPACITY_BASELINE_PERFORMANCE_LIMIT', 50),
-    seatLimit: positiveInteger('LOADTEST_CAPACITY_BASELINE_SEAT_LIMIT', 200),
-    calendarYearMonth: optional('LOADTEST_CAPACITY_BASELINE_CALENDAR_YEAR_MONTH', '2026-07'),
-    performanceDate: optional('LOADTEST_CAPACITY_BASELINE_PERFORMANCE_DATE', '2026-07-01'),
-    ticketListLimit: positiveInteger('LOADTEST_CAPACITY_BASELINE_TICKET_LIST_LIMIT', 20),
-    paymentAmount: positiveInteger('LOADTEST_CAPACITY_BASELINE_PAYMENT_AMOUNT', 50000),
-    ticketIssuePoolCount: positiveInteger('LOADTEST_CAPACITY_BASELINE_TICKET_ISSUE_POOL_COUNT', 170000),
-    targetUtilization: positiveNumber('LOADTEST_CAPACITY_BASELINE_TARGET_UTILIZATION', 0.7),
-    seedMethod: optional('LOADTEST_CAPACITY_BASELINE_SEED_METHOD', 'deterministic_bulk_insert'),
-    fixedConditions: parseJsonObject('LOADTEST_CAPACITY_BASELINE_FIXED_CONDITIONS', {}),
+    gracefulStop: optional(envName(envPrefix, 'GRACEFUL_STOP'), '15s'),
+    thinkTimeSeconds: nonNegativeNumber(envName(envPrefix, 'THINK_TIME_SECONDS'), 0),
+    activeCustomerCount: positiveInteger(envName(envPrefix, 'ACTIVE_CUSTOMER_COUNT'), 20),
+    concertLimit: positiveInteger(envName(envPrefix, 'CONCERT_LIMIT'), 50),
+    performanceLimit: positiveInteger(envName(envPrefix, 'PERFORMANCE_LIMIT'), 50),
+    seatLimit: positiveInteger(envName(envPrefix, 'SEAT_LIMIT'), 200),
+    calendarYearMonth: optional(envName(envPrefix, 'CALENDAR_YEAR_MONTH'), '2026-07'),
+    performanceDate: optional(envName(envPrefix, 'PERFORMANCE_DATE'), '2026-07-01'),
+    ticketListLimit: positiveInteger(envName(envPrefix, 'TICKET_LIST_LIMIT'), 20),
+    paymentAmount: positiveInteger(envName(envPrefix, 'PAYMENT_AMOUNT'), 50000),
+    ticketIssuePoolCount: positiveInteger(envName(envPrefix, 'TICKET_ISSUE_POOL_COUNT'), 170000),
+    targetUtilization: positiveNumber(envName(envPrefix, 'TARGET_UTILIZATION'), 0.7),
+    seedMethod: optional(envName(envPrefix, 'SEED_METHOD'), 'deterministic_bulk_insert'),
+    fixedConditions: parseJsonObject(envName(envPrefix, 'FIXED_CONDITIONS'), {}),
     resourceObservation: {
-      enabled: optional('LOADTEST_CAPACITY_BASELINE_RESOURCE_OBSERVATION_ENABLED', 'false') === 'true',
-      source: optional('LOADTEST_CAPACITY_BASELINE_RESOURCE_OBSERVATION_SOURCE', 'prometheus'),
+      enabled: optional(envName(envPrefix, 'RESOURCE_OBSERVATION_ENABLED'), 'false') === 'true',
+      source: optional(envName(envPrefix, 'RESOURCE_OBSERVATION_SOURCE'), 'prometheus'),
       prometheusUrl: optional(
-        'LOADTEST_CAPACITY_BASELINE_PROMETHEUS_URL',
+        envName(envPrefix, 'PROMETHEUS_URL'),
         'http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090',
       ).replace(/\/+$/, ''),
-      queryWindow: optional('LOADTEST_CAPACITY_BASELINE_RESOURCE_QUERY_WINDOW', '1m'),
-      pollEveryIterations: positiveInteger('LOADTEST_CAPACITY_BASELINE_RESOURCE_POLL_EVERY_ITERATIONS', 10),
-      targets: parseResourceTargets(),
+      queryWindow: optional(envName(envPrefix, 'RESOURCE_QUERY_WINDOW'), '1m'),
+      pollEveryIterations: positiveInteger(envName(envPrefix, 'RESOURCE_POLL_EVERY_ITERATIONS'), 10),
+      targets: parseResourceTargets(envPrefix),
     },
-    schemaRevisions: parseJsonObject('LOADTEST_CAPACITY_BASELINE_SCHEMA_REVISIONS', {}),
-    seedRowCounts: parseJsonObject('LOADTEST_CAPACITY_BASELINE_SEED_ROW_COUNTS', {}),
-    endpointSloP95Ms: parseJsonObject('LOADTEST_CAPACITY_BASELINE_ENDPOINT_SLO_P95_MS', {
+    schemaRevisions: parseJsonObject(envName(envPrefix, 'SCHEMA_REVISIONS'), {}),
+    seedRowCounts: parseJsonObject(envName(envPrefix, 'SEED_ROW_COUNTS'), {}),
+    endpointSloP95Ms: parseJsonObject(envName(envPrefix, 'ENDPOINT_SLO_P95_MS'), {
       'capacity_baseline.auth.login': 300,
       'capacity_baseline.concert.recommended': 80,
       'capacity_baseline.concert.detail': 80,
@@ -207,10 +236,14 @@ export function getCapacityBaselineConfig() {
       'capacity_baseline.notification.list': 80,
     }),
     thresholds: {
-      httpReqFailedRate: rate('LOADTEST_CAPACITY_BASELINE_THRESHOLD_HTTP_REQ_FAILED_RATE', 0.01),
-      httpReqDurationP95Ms: positiveNumber('LOADTEST_CAPACITY_BASELINE_THRESHOLD_HTTP_REQ_DURATION_P95_MS', 100),
-      httpReqDurationP99Ms: positiveNumber('LOADTEST_CAPACITY_BASELINE_THRESHOLD_HTTP_REQ_DURATION_P99_MS', 300),
-      checksRate: rate('LOADTEST_CAPACITY_BASELINE_THRESHOLD_CHECKS_RATE', 0.99),
+      httpReqFailedRate: rate(envName(envPrefix, 'THRESHOLD_HTTP_REQ_FAILED_RATE'), 0.01),
+      httpReqDurationP95Ms: positiveNumber(envName(envPrefix, 'THRESHOLD_HTTP_REQ_DURATION_P95_MS'), 100),
+      httpReqDurationP99Ms: positiveNumber(envName(envPrefix, 'THRESHOLD_HTTP_REQ_DURATION_P99_MS'), 300),
+      checksRate: rate(envName(envPrefix, 'THRESHOLD_CHECKS_RATE'), 0.99),
     },
   };
+}
+
+export function getCapacityBaselineConfig() {
+  return getCapacityLikeServiceConfig();
 }

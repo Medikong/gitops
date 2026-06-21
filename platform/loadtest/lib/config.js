@@ -5,6 +5,7 @@ import { getAuthLoginConfig } from './config/scenarios/auth-login.js';
 import { getReadApiBaselineConfig } from './config/scenarios/read-api-baseline.js';
 import { getReservationCreateConfig, getReservationSeatContentionConfig } from './config/scenarios/reservation-load.js';
 import { getReservationJourneyConfig } from './config/scenarios/reservation-journey.js';
+import { getServiceHpaSpikeConfig } from './config/scenarios/service-hpa-spike.js';
 import { getTicketServiceReadConfig } from './config/scenarios/ticket-service-read.js';
 
 function scenarioConfig(scenario) {
@@ -28,6 +29,9 @@ function scenarioConfig(scenario) {
   }
   if (scenario === 'capacity-baseline-load-test') {
     return getCapacityBaselineConfig();
+  }
+  if (scenario === 'service-hpa-spike-load-test') {
+    return getServiceHpaSpikeConfig();
   }
   if (scenario === 'ticket-service-read-load-test') {
     return getTicketServiceReadConfig();

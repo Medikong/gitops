@@ -241,6 +241,45 @@ data:
   LOADTEST_CAPACITY_BASELINE_THRESHOLD_HTTP_REQ_DURATION_P95_MS: {{ .Values.scenarios.capacityBaseline.thresholds.httpReqDurationP95Ms | quote }}
   LOADTEST_CAPACITY_BASELINE_THRESHOLD_HTTP_REQ_DURATION_P99_MS: {{ .Values.scenarios.capacityBaseline.thresholds.httpReqDurationP99Ms | quote }}
   LOADTEST_CAPACITY_BASELINE_THRESHOLD_CHECKS_RATE: {{ .Values.scenarios.capacityBaseline.thresholds.checksRate | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_REQUEST_PREFIX: {{ .Values.scenarios.serviceHpaSpike.requestPrefix | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_TIMEOUT_SECONDS: {{ .Values.scenarios.serviceHpaSpike.timeoutSeconds | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_SETUP_TIMEOUT: {{ .Values.scenarios.serviceHpaSpike.setupTimeout | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_VUS: {{ .Values.scenarios.serviceHpaSpike.vus | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_RATE: {{ .Values.scenarios.serviceHpaSpike.rate | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_TIME_UNIT: {{ .Values.scenarios.serviceHpaSpike.timeUnit | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_PRE_ALLOCATED_VUS: {{ .Values.scenarios.serviceHpaSpike.preAllocatedVUs | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_MAX_VUS: {{ .Values.scenarios.serviceHpaSpike.maxVUs | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_DURATION: {{ .Values.scenarios.serviceHpaSpike.duration | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_SERVICE_STEPS: {{ toJson .Values.scenarios.serviceHpaSpike.serviceSteps | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_STAGES: {{ toJson .Values.scenarios.serviceHpaSpike.stages | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_SERVICE_STAGES: {{ toJson (.Values.scenarios.serviceHpaSpike.serviceStages | default dict) | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_GRACEFUL_STOP: {{ .Values.scenarios.serviceHpaSpike.gracefulStop | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_THINK_TIME_SECONDS: {{ .Values.scenarios.serviceHpaSpike.thinkTimeSeconds | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_ACTIVE_CUSTOMER_COUNT: {{ .Values.scenarios.serviceHpaSpike.activeCustomerCount | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_CONCERT_LIMIT: {{ .Values.scenarios.serviceHpaSpike.concertLimit | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_PERFORMANCE_LIMIT: {{ .Values.scenarios.serviceHpaSpike.performanceLimit | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_SEAT_LIMIT: {{ .Values.scenarios.serviceHpaSpike.seatLimit | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_CALENDAR_YEAR_MONTH: {{ .Values.scenarios.serviceHpaSpike.calendarYearMonth | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_PERFORMANCE_DATE: {{ .Values.scenarios.serviceHpaSpike.performanceDate | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_TICKET_LIST_LIMIT: {{ .Values.scenarios.serviceHpaSpike.ticketListLimit | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_PAYMENT_AMOUNT: {{ .Values.scenarios.serviceHpaSpike.paymentAmount | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_TICKET_ISSUE_POOL_COUNT: {{ .Values.scenarios.serviceHpaSpike.ticketIssuePoolCount | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_TARGET_UTILIZATION: {{ .Values.scenarios.serviceHpaSpike.targetUtilization | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_SEED_METHOD: {{ .Values.scenarios.serviceHpaSpike.seedMethod | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_FIXED_CONDITIONS: {{ toJson .Values.scenarios.serviceHpaSpike.fixedConditions | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_SCHEMA_REVISIONS: {{ toJson .Values.scenarios.serviceHpaSpike.schemaRevisions | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_SEED_ROW_COUNTS: {{ toJson .Values.scenarios.serviceHpaSpike.seedRowCounts | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_ENDPOINT_SLO_P95_MS: {{ toJson .Values.scenarios.serviceHpaSpike.endpointSloP95Ms | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_RESOURCE_OBSERVATION_ENABLED: {{ .Values.scenarios.serviceHpaSpike.resourceObservation.enabled | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_RESOURCE_OBSERVATION_SOURCE: {{ .Values.scenarios.serviceHpaSpike.resourceObservation.source | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_PROMETHEUS_URL: {{ .Values.scenarios.serviceHpaSpike.resourceObservation.prometheusUrl | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_RESOURCE_QUERY_WINDOW: {{ .Values.scenarios.serviceHpaSpike.resourceObservation.queryWindow | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_RESOURCE_POLL_EVERY_ITERATIONS: {{ .Values.scenarios.serviceHpaSpike.resourceObservation.pollEveryIterations | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_RESOURCE_TARGETS: {{ toJson .Values.scenarios.serviceHpaSpike.resourceObservation.targets | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_THRESHOLD_HTTP_REQ_FAILED_RATE: {{ .Values.scenarios.serviceHpaSpike.thresholds.httpReqFailedRate | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_THRESHOLD_HTTP_REQ_DURATION_P95_MS: {{ .Values.scenarios.serviceHpaSpike.thresholds.httpReqDurationP95Ms | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_THRESHOLD_HTTP_REQ_DURATION_P99_MS: {{ .Values.scenarios.serviceHpaSpike.thresholds.httpReqDurationP99Ms | quote }}
+  LOADTEST_SERVICE_HPA_SPIKE_THRESHOLD_CHECKS_RATE: {{ .Values.scenarios.serviceHpaSpike.thresholds.checksRate | quote }}
   LOADTEST_CUSTOMER_POOL_SIZE: {{ .Values.dataset.customerPool.size | quote }}
   LOADTEST_CUSTOMER_POOL_EMAIL_PREFIX: {{ .Values.dataset.customerPool.emailPrefix | quote }}
   LOADTEST_CUSTOMER_POOL_EMAIL_DOMAIN: {{ .Values.dataset.customerPool.emailDomain | quote }}

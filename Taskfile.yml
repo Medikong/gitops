@@ -155,7 +155,7 @@ tasks:
           printf 'Waiting %ss for Prometheus scrape warmup before capacity baseline run.\n' "${warmup_seconds}"
           sleep "${warmup_seconds}"
         else
-          if [ "${scenario}" = "reservation-journey-load-test" ] && { [ "${preset}" = "local-hpa-spike-3m" ] || [ "${preset}" = "local-hpa-spike-smoke-1m" ] || [ "${preset}" = "local-hpa-spike-scaleout-6m" ]; }; then
+          if { [ "${scenario}" = "reservation-journey-load-test" ] && { [ "${preset}" = "local-hpa-spike-3m" ] || [ "${preset}" = "local-hpa-spike-smoke-1m" ] || [ "${preset}" = "local-hpa-spike-scaleout-6m" ]; }; } || [ "${scenario}" = "service-hpa-spike-load-test" ]; then
             printf 'Redeploying local dev services with HPA enabled for preset=%s.\n' "${preset}"
             task dev:services \
               LOCAL_DOCKER_DESKTOP_ENV=local-hpa-spike \
