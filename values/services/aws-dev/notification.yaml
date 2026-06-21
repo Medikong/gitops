@@ -1,5 +1,5 @@
 deployment:
-  replicas: 1
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -20,8 +20,8 @@ container:
 
 database:
   sqlalchemy:
-    poolSize: 70
-    maxOverflow: 20
+    poolSize: 10
+    maxOverflow: 0
     poolTimeoutSeconds: 15
     poolRecycleSeconds: 1800
 
@@ -29,4 +29,7 @@ pdb:
   enabled: false
 
 hpa:
-  enabled: false
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70

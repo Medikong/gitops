@@ -9,7 +9,7 @@ container:
 
 database:
   sqlalchemy:
-    poolSize: 35
-    maxOverflow: 10
+    poolSize: 15
+    maxOverflow: 0
     poolTimeoutSeconds: 15
     poolRecycleSeconds: 1800
