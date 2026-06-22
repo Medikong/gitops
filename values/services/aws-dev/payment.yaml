@@ -1,5 +1,5 @@
 deployment:
-  replicas: 2
+  replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -12,7 +12,7 @@ canary:
 container:
   resources:
     requests:
-      cpu: 1000m
+      cpu: 400m
       memory: 256Mi
     limits:
       cpu: null
@@ -30,6 +30,6 @@ pdb:
 
 hpa:
   enabled: true
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70

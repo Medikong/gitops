@@ -1,5 +1,5 @@
 deployment:
-  replicas: 2
+  replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -23,7 +23,7 @@ container:
       value: auth-service
   resources:
     requests:
-      cpu: 1000m
+      cpu: 600m
       memory: 256Mi
     limits:
       cpu: "2"
@@ -41,6 +41,6 @@ pdb:
 
 hpa:
   enabled: true
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70

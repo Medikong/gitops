@@ -1,7 +1,7 @@
 container:
   resources:
     requests:
-      cpu: 1000m
+      cpu: 500m
       memory: 256Mi
     limits:
       cpu: null

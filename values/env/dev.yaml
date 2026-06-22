@@ -8,7 +8,7 @@ image:
   pullPolicy: Always
 
 deployment:
-  replicas: 2
+  replicas: 1
   strategy:
     rollingUpdate:
       maxUnavailable: 1
