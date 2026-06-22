@@ -7,7 +7,7 @@ app:
 
 image:
   repository: auth-service
-  tag: v0.2.2
+  tag: v0.2.3
 
 deployment:
   replicas: 3
