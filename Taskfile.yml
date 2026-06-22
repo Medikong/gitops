@@ -1422,6 +1422,10 @@ tasks:
           printf 'Unknown environment values file: %s\n' "${env_file}" >&2
           exit 2
         fi
+        env_service_values=""
+        if [ -f "values/services/${env}/${service}.yaml" ]; then
+          env_service_values="-f values/services/${env}/${service}.yaml"
+        fi
         extra_values=""
         if [ -f "values/overrides/${env}/${service}.yaml" ]; then
           extra_values="-f values/overrides/${env}/${service}.yaml"
@@ -1430,6 +1434,7 @@ tasks:
           -f {{.VALUES_BASE}} \
           -f "${service_file}" \
           -f "${env_file}" \
+          ${env_service_values} \
           ${extra_values} >/dev/null
 
   scenario:all:

@@ -1,0 +1,8 @@
+container:
+  resources:
+    requests:
+      cpu: 300m
+      memory: 96Mi
+    limits:
+      cpu: 300m
+      memory: 384Mi
