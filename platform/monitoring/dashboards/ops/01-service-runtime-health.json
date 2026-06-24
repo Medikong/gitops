@@ -75,7 +75,9 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+
+        ]
       },
       "targets": [
         {
@@ -141,7 +143,9 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+
+        ]
       },
       "targets": [
         {
@@ -207,7 +211,9 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+
+        ]
       },
       "targets": [
         {
@@ -273,7 +279,9 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+
+        ]
       },
       "targets": [
         {
@@ -339,7 +347,9 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+
+        ]
       },
       "targets": [
         {
@@ -405,7 +415,9 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+
+        ]
       },
       "targets": [
         {
@@ -1535,43 +1547,18 @@
       }
     },
     {
-      "id": 7,
-      "title": "Available Pod Ratio by Deployment",
-      "type": "bargauge",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
+      "id": 21,
+      "title": "Pending Pods",
+      "type": "table",
       "gridPos": {
+        "h": 8,
+        "w": 12,
         "x": 0,
-        "y": 16,
-        "w": 12,
-        "h": 8
+        "y": 16
       },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.99
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          },
-          "min": 0,
-          "max": 1
-        },
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       },
       "targets": [
         {
@@ -1580,69 +1567,54 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "topk(12, sum by (namespace, deployment) (kube_deployment_status_replicas_available{namespace=~\"$namespace\"}) / clamp_min(sum by (namespace, deployment) (kube_deployment_spec_replicas{namespace=~\"$namespace\"}), 1))",
-          "legendFormat": "{{namespace}}/{{deployment}}",
+          "expr": "sum by (namespace, pod, phase) (kube_pod_status_phase{namespace=~\"$namespace\",phase=\"Pending\"} == 1)",
+          "legendFormat": "{{namespace}} {{pod}}",
           "range": false,
           "refId": "A",
-          "instant": true
+          "instant": true,
+          "format": "table"
         }
       ],
-      "options": {
-        "displayMode": "basic",
-        "maxVizHeight": 300,
-        "minVizHeight": 16,
-        "minVizWidth": 8,
-        "namePlacement": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+      "fieldConfig": {
+        "defaults": {
         },
-        "showUnfilled": true,
-        "sizing": "auto",
-        "valueMode": "color"
-      }
+        "overrides": [
+
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Value"
+          }
+        ]
+      },
+      "description": "Pods stuck before running. CPU request exhaustion usually appears here first as a replica gap plus pending pod."
     },
     {
-      "id": 8,
-      "title": "Unavailable Pods by Deployment",
-      "type": "bargauge",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
+      "id": 22,
+      "title": "Pod Status Reasons",
+      "type": "table",
       "gridPos": {
+        "h": 8,
+        "w": 12,
         "x": 12,
-        "y": 16,
-        "w": 12,
-        "h": 8
+        "y": 16
       },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 3
-              }
-            ]
-          },
-          "min": 0
-        },
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       },
       "targets": [
         {
@@ -1651,69 +1623,54 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "topk(12, sum by (namespace, deployment) (kube_deployment_spec_replicas{namespace=~\"$namespace\"} - kube_deployment_status_replicas_available{namespace=~\"$namespace\"}))",
-          "legendFormat": "{{namespace}}/{{deployment}}",
+          "expr": "sum by (namespace, pod, reason) (kube_pod_status_reason{namespace=~\"$namespace\",reason=~\"NodeAffinity|UnexpectedAdmissionError|Evicted|NodeLost|Shutdown\"} == 1)",
+          "legendFormat": "{{namespace}} {{pod}} {{reason}}",
           "range": false,
           "refId": "A",
-          "instant": true
+          "instant": true,
+          "format": "table"
         }
       ],
-      "options": {
-        "displayMode": "basic",
-        "maxVizHeight": 300,
-        "minVizHeight": 16,
-        "minVizWidth": 8,
-        "namePlacement": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+      "fieldConfig": {
+        "defaults": {
         },
-        "showUnfilled": true,
-        "sizing": "auto",
-        "valueMode": "color"
-      }
+        "overrides": [
+
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Value"
+          }
+        ]
+      },
+      "description": "Coarse kube-state-metrics pod reasons. Use node request budget panels for Insufficient cpu confirmation."
     },
     {
-      "id": 9,
-      "title": "Pod Counts by Deployment",
-      "type": "bargauge",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
+      "id": 23,
+      "title": "Container Waiting Reasons",
+      "type": "table",
       "gridPos": {
+        "h": 8,
+        "w": 12,
         "x": 0,
-        "y": 24,
-        "w": 12,
-        "h": 8
+        "y": 24
       },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 3
-              }
-            ]
-          },
-          "min": 0
-        },
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       },
       "targets": [
         {
@@ -1722,93 +1679,54 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (namespace, deployment) (kube_deployment_spec_replicas{namespace=~\"$namespace\"})",
-          "legendFormat": "{{namespace}}/{{deployment}} desired",
+          "expr": "sum by (namespace, pod, container, reason) (kube_pod_container_status_waiting_reason{namespace=~\"$namespace\",container!=\"\",container!=\"POD\",pod!=\"\"})",
+          "legendFormat": "{{namespace}} {{pod}} {{container}} {{reason}}",
           "range": false,
           "refId": "A",
-          "instant": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (namespace, deployment) (kube_deployment_status_replicas_available{namespace=~\"$namespace\"})",
-          "legendFormat": "{{namespace}}/{{deployment}} available",
-          "range": false,
-          "refId": "B",
-          "instant": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (namespace, deployment) (kube_deployment_spec_replicas{namespace=~\"$namespace\"} - kube_deployment_status_replicas_available{namespace=~\"$namespace\"})",
-          "legendFormat": "{{namespace}}/{{deployment}} unavailable",
-          "range": false,
-          "refId": "C",
-          "instant": true
+          "instant": true,
+          "format": "table"
         }
       ],
-      "options": {
-        "displayMode": "basic",
-        "maxVizHeight": 300,
-        "minVizHeight": 16,
-        "minVizWidth": 8,
-        "namePlacement": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+      "fieldConfig": {
+        "defaults": {
         },
-        "showUnfilled": true,
-        "sizing": "auto",
-        "valueMode": "color"
-      }
+        "overrides": [
+
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Value"
+          }
+        ]
+      },
+      "description": "Startup failures such as ImagePullBackOff, CrashLoopBackOff, or CreateContainerConfigError when kube-state-metrics reports them."
     },
     {
-      "id": 10,
-      "title": "Ready False Pods by Service",
-      "type": "bargauge",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
+      "id": 24,
+      "title": "Terminated or Error Containers",
+      "type": "table",
       "gridPos": {
+        "h": 8,
+        "w": 12,
         "x": 12,
-        "y": 24,
-        "w": 12,
-        "h": 8
+        "y": 24
       },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 3
-              }
-            ]
-          },
-          "min": 0
-        },
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       },
       "targets": [
         {
@@ -1817,317 +1735,85 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (namespace) (kube_pod_status_ready{namespace=~\"$namespace\",condition=\"false\"}) or on(namespace) (0 * sum by (namespace) (kube_deployment_spec_replicas{namespace=~\"$namespace\"}))",
-          "legendFormat": "{{namespace}}",
+          "expr": "sum by (namespace, pod, container, reason) (kube_pod_container_status_terminated_reason{namespace=~\"$namespace\",container!=\"\",container!=\"POD\",pod!=\"\",reason=~\"Error|OOMKilled|ContainerCannotRun\"} == 1) or sum by (namespace, pod, container, reason) (kube_pod_container_status_last_terminated_reason{namespace=~\"$namespace\",container!=\"\",pod!=\"\",reason=~\"Error|OOMKilled|ContainerCannotRun\"} == 1)",
+          "legendFormat": "{{namespace}} {{pod}} {{container}} {{reason}}",
           "range": false,
           "refId": "A",
-          "instant": true
+          "instant": true,
+          "format": "table"
         }
       ],
-      "options": {
-        "displayMode": "basic",
-        "maxVizHeight": 300,
-        "minVizHeight": 16,
-        "minVizWidth": 8,
-        "namePlacement": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+      "fieldConfig": {
+        "defaults": {
         },
-        "showUnfilled": true,
-        "sizing": "auto",
-        "valueMode": "color"
-      }
+        "overrides": [
+
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Value"
+          }
+        ]
+      },
+      "description": "Containers that failed during or after startup."
     },
     {
-      "id": 11,
-      "title": "Restart Increase 30m by Service",
-      "type": "bargauge",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
+      "id": 25,
+      "title": "Recent Failed Pod Logs",
+      "type": "logs",
       "gridPos": {
+        "h": 12,
+        "w": 24,
         "x": 0,
-        "y": 32,
-        "w": 12,
-        "h": 8
+        "y": 32
       },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 3
-              }
-            ]
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (namespace) (increase(kube_pod_container_status_restarts_total{namespace=~\"$namespace\",container!=\"\",container!=\"POD\",pod!=\"\"}[30m])) or on(namespace) (0 * sum by (namespace) (kube_deployment_spec_replicas{namespace=~\"$namespace\"}))",
-          "legendFormat": "{{namespace}}",
-          "range": false,
-          "refId": "A",
-          "instant": true
-        }
-      ],
-      "options": {
-        "displayMode": "basic",
-        "maxVizHeight": 300,
-        "minVizHeight": 16,
-        "minVizWidth": 8,
-        "namePlacement": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showUnfilled": true,
-        "sizing": "auto",
-        "valueMode": "color"
-      }
-    },
-    {
-      "id": 12,
-      "title": "OOMKilled Containers by Service",
-      "type": "bargauge",
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 32,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 3
-              }
-            ]
-          },
-          "min": 0
-        },
-        "overrides": []
+        "type": "loki",
+        "uid": "loki"
       },
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "loki",
+            "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum by (namespace) (kube_pod_container_status_last_terminated_reason{namespace=~\"$namespace\",reason=\"OOMKilled\",container!=\"\",pod!=\"\"}) or on(namespace) (0 * sum by (namespace) (kube_deployment_spec_replicas{namespace=~\"$namespace\"}))",
-          "legendFormat": "{{namespace}}",
-          "range": false,
-          "refId": "A",
-          "instant": true
+          "expr": "{k8s_namespace_name=~\"$namespace\"} |~ \"CrashLoopBackOff|Back-off|Error|Exception|Traceback|Failed|OOMKilled|ContainerCannotRun|ImagePullBackOff|ErrImagePull|FailedToRetrieveImagePullSecret|upstream_reset|Connection_refused|503\"",
+          "range": true,
+          "refId": "A"
         }
       ],
-      "options": {
-        "displayMode": "basic",
-        "maxVizHeight": 300,
-        "minVizHeight": 16,
-        "minVizWidth": 8,
-        "namePlacement": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showUnfilled": true,
-        "sizing": "auto",
-        "valueMode": "color"
-      }
-    },
-    {
-      "id": 13,
-      "title": "Memory Limit Usage Top 10",
-      "type": "bargauge",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 40,
-        "w": 12,
-        "h": 8
-      },
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.7
-              },
-              {
-                "color": "red",
-                "value": 0.9
-              }
-            ]
-          },
-          "min": 0,
-          "max": 1
         },
-        "overrides": []
+        "overrides": [
+
+        ]
       },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "topk(10, sum by (namespace, pod, container) (container_memory_working_set_bytes{namespace=~\"$namespace\",container!=\"\",container!=\"POD\",pod!=\"\",image!=\"\"}) / clamp_min(sum by (namespace, pod, container) (kube_pod_container_resource_limits{namespace=~\"$namespace\",resource=\"memory\",unit=\"byte\",container!=\"\"}), 1))",
-          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
-          "range": false,
-          "refId": "A",
-          "instant": true
-        }
-      ],
       "options": {
-        "displayMode": "basic",
-        "maxVizHeight": 300,
-        "minVizHeight": 16,
-        "minVizWidth": 8,
-        "namePlacement": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showUnfilled": true,
-        "sizing": "auto",
-        "valueMode": "color"
-      }
-    },
-    {
-      "id": 14,
-      "title": "CPU Throttling Ratio Top 10",
-      "type": "bargauge",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
       },
-      "gridPos": {
-        "x": 12,
-        "y": 40,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.7
-              },
-              {
-                "color": "red",
-                "value": 0.9
-              }
-            ]
-          },
-          "min": 0,
-          "max": 1
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "topk(10, sum by (namespace, pod, container) (rate(container_cpu_cfs_throttled_seconds_total{namespace=~\"$namespace\",container!=\"\",container!=\"POD\",pod!=\"\",image!=\"\"}[$__rate_interval])) / clamp_min(sum by (namespace, pod, container) (rate(container_cpu_cfs_periods_total{namespace=~\"$namespace\",container!=\"\",container!=\"POD\",pod!=\"\",image!=\"\"}[$__rate_interval])), 0.001))",
-          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
-          "range": false,
-          "refId": "A",
-          "instant": true
-        }
-      ],
-      "options": {
-        "displayMode": "basic",
-        "maxVizHeight": 300,
-        "minVizHeight": 16,
-        "minVizWidth": 8,
-        "namePlacement": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showUnfilled": true,
-        "sizing": "auto",
-        "valueMode": "color"
-      }
+      "description": "Recent service pod logs matching startup, runtime, image pull, proxy, and 5xx failure hints."
     }
   ]
 }
