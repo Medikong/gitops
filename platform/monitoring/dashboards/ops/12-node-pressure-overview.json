@@ -542,8 +542,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 * sum by (node) (kube_pod_container_resource_requests{node=~\"$node\",resource=\"cpu\",unit=\"core\"}) / clamp_min(sum by (node) (kube_node_status_allocatable{node=~\"$node\",resource=\"cpu\",unit=\"core\"}), 0.001)",
-          "legendFormat": "{{node}}",
+          "expr": "((100 * sum by (node) (kube_pod_container_resource_requests{node=~\"$node\",resource=\"cpu\",unit=\"core\"}) / clamp_min(sum by (node) (kube_node_status_allocatable{node=~\"$node\",resource=\"cpu\",unit=\"core\"}), 0.001)) * on (node) group_left(label_role) kube_node_labels{node=~\"$node\",label_role=~\".+\"}) or ((100 * sum by (node) (kube_pod_container_resource_requests{node=~\"$node\",resource=\"cpu\",unit=\"core\"}) / clamp_min(sum by (node) (kube_node_status_allocatable{node=~\"$node\",resource=\"cpu\",unit=\"core\"}), 0.001)) unless on (node) kube_node_labels{node=~\"$node\",label_role=~\".+\"})",
+          "legendFormat": "{{node}} {{label_role}}",
           "range": false,
           "refId": "A",
           "instant": true
@@ -597,8 +597,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (node) (kube_node_status_allocatable{node=~\"$node\",resource=\"cpu\",unit=\"core\"}) - sum by (node) (kube_pod_container_resource_requests{node=~\"$node\",resource=\"cpu\",unit=\"core\"})",
-          "legendFormat": "{{node}}",
+          "expr": "((sum by (node) (kube_node_status_allocatable{node=~\"$node\",resource=\"cpu\",unit=\"core\"}) - sum by (node) (kube_pod_container_resource_requests{node=~\"$node\",resource=\"cpu\",unit=\"core\"})) * on (node) group_left(label_role) kube_node_labels{node=~\"$node\",label_role=~\".+\"}) or ((sum by (node) (kube_node_status_allocatable{node=~\"$node\",resource=\"cpu\",unit=\"core\"}) - sum by (node) (kube_pod_container_resource_requests{node=~\"$node\",resource=\"cpu\",unit=\"core\"})) unless on (node) kube_node_labels{node=~\"$node\",label_role=~\".+\"})",
+          "legendFormat": "{{node}} {{label_role}}",
           "range": false,
           "refId": "A",
           "instant": true
@@ -786,8 +786,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "topk(40, kube_pod_container_resource_requests{node=~\"$node\",resource=\"cpu\",unit=\"core\",namespace=~\"ticketing-.*|loadtest|kong|monitoring|observability\"})",
-          "legendFormat": "{{node}} {{namespace}} {{pod}} {{container}}",
+          "expr": "(topk(40, kube_pod_container_resource_requests{node=~\"$node\",resource=\"cpu\",unit=\"core\",namespace=~\"ticketing-.*|loadtest|kong|monitoring|observability\"}) * on (node) group_left(label_role) kube_node_labels{node=~\"$node\",label_role=~\".+\"}) or (topk(40, kube_pod_container_resource_requests{node=~\"$node\",resource=\"cpu\",unit=\"core\",namespace=~\"ticketing-.*|loadtest|kong|monitoring|observability\"}) unless on (node) kube_node_labels{node=~\"$node\",label_role=~\".+\"})",
+          "legendFormat": "{{node}} {{label_role}}",
           "range": false,
           "refId": "A",
           "instant": true,

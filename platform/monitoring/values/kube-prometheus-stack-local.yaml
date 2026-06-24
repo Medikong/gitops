@@ -168,6 +168,8 @@ prometheus:
         memory: 768Mi
 
 kube-state-metrics:
+  metricLabelsAllowlist:
+    - nodes=[role]
   resources:
     requests:
       cpu: 10m
