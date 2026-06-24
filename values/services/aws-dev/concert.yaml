@@ -15,7 +15,7 @@ container:
       cpu: 500m
       memory: 256Mi
     limits:
-      cpu: null
+      cpu: "1"
       memory: 768Mi
 
 database:
