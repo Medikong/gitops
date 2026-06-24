@@ -15,8 +15,8 @@ spec:
       releaseName: read-api-loadtest
       valueFiles:
         - values/aws-dev.yaml
-        - values/presets/capacity-baseline/aws-dev-smoke.yaml
-        - values/runs/aws-dev/capacity-baseline-aws-dev-smoke.yaml
+        - values/presets/reservation-journey/aws-dev-hpa-journey-r10-r50.yaml
+        - values/runs/aws-dev/reservation-journey-aws-dev-hpa-journey-r10-r50.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: loadtest
