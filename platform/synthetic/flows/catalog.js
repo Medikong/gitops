@@ -28,15 +28,37 @@ function pickConcert(config, concerts) {
   return pickByRunId(candidates, config.runId);
 }
 
+function fixtureConcertId(fixture) {
+  return fixture && fixture.concert && fixture.concert.id ? String(fixture.concert.id) : '';
+}
+
+function fixtureShowtimeId(fixture) {
+  return fixture && fixture.showtime && fixture.showtime.id ? String(fixture.showtime.id) : '';
+}
+
+function pickPerformance(config, performances, showtimeId, offset) {
+  if (showtimeId) {
+    const found = performances.find((performance) => String(performance.id) === showtimeId);
+    if (!found) {
+      fail(`catalog.performances did not include fixture showtime ${showtimeId}`);
+    }
+    return found;
+  }
+  return pickByRunId(performances, config.runId, offset);
+}
+
 export function checkCatalog(config, trace) {
   const response = request(config, trace, 'catalog.concerts', 'GET', '/concerts', null, {}, { limit: 50 });
   return itemsFrom(requireJson(response, 'catalog.concerts'));
 }
 
-export function selectSyntheticSeat(config, trace, offset = 0) {
-  const concerts = checkCatalog(config, trace);
-  const concert = pickConcert(config, concerts);
-  const concertId = requireField(concert, 'id', 'catalog.concerts');
+export function selectSyntheticSeat(config, trace, offset = 0, fixture = null) {
+  const concertId = fixtureConcertId(fixture) || config.concertId || requireField(
+    pickConcert(config, checkCatalog(config, trace)),
+    'id',
+    'catalog.concerts',
+  );
+  const showtimeId = fixtureShowtimeId(fixture);
 
   const performanceResponse = request(
     config,
@@ -52,7 +74,7 @@ export function selectSyntheticSeat(config, trace, offset = 0) {
   if (performances.length === 0) {
     fail(`catalog.performances returned no performances for concert ${concertId}`);
   }
-  const performance = pickByRunId(performances, config.runId, offset);
+  const performance = pickPerformance(config, performances, showtimeId, offset);
   const performanceId = requireField(performance, 'id', 'catalog.performances');
 
   const seatResponse = request(

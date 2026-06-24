@@ -1,5 +1,9 @@
 environment: local
 
+namespace:
+  create: false
+  name: synthetic
+
 image:
   registry: localhost:5001
   repository: synthetic-traffic

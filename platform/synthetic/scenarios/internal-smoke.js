@@ -1,10 +1,10 @@
 import { group } from 'k6';
-import { fail } from 'k6';
 
 import { checkAuth } from '../flows/auth.js';
 import { checkCatalog } from '../flows/catalog.js';
 import { getConfig } from '../lib/config.js';
 import { logRunFailed, logRunFinished, logRunStarted } from '../lib/log.js';
+import { failRun, recordRunSuccess, syntheticRunSuccessThreshold } from '../lib/outcome.js';
 import { createTraceContext } from '../lib/trace.js';
 
 export const options = {
@@ -12,6 +12,7 @@ export const options = {
     checks: ['rate>0.99'],
     http_req_failed: ['rate<0.01'],
     http_req_duration: ['p(95)<1000'],
+    synthetic_run_success: syntheticRunSuccessThreshold,
   },
 };
 
@@ -30,9 +31,10 @@ export default function () {
       step = 'catalog.concerts';
       checkCatalog(config, trace);
     });
+    recordRunSuccess();
     logRunFinished(config);
   } catch (error) {
     logRunFailed(config, trace, step, error);
-    fail(error.message || String(error));
+    failRun(error);
   }
 }

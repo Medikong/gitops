@@ -1,10 +1,10 @@
 import { group } from 'k6';
-import { fail } from 'k6';
 
 import { loginAdmin, loginCustomer, loginProvider } from '../flows/auth.js';
 import { setupSyntheticFixture } from '../flows/fixture.js';
 import { getConfig, requireFixtureCredentials } from '../lib/config.js';
 import { logRunFailed, logRunFinished, logRunStarted } from '../lib/log.js';
+import { failRun, recordRunSuccess, syntheticRunSuccessThreshold } from '../lib/outcome.js';
 import { createTraceContext } from '../lib/trace.js';
 
 export const options = {
@@ -12,6 +12,7 @@ export const options = {
     checks: ['rate>0.99'],
     http_req_failed: ['rate<0.01'],
     http_req_duration: ['p(95)<2000'],
+    synthetic_run_success: syntheticRunSuccessThreshold,
   },
 };
 
@@ -45,12 +46,13 @@ export default function () {
       });
     });
 
+    recordRunSuccess();
     logRunFinished(config, {
       concert: state.fixture && state.fixture.concert,
       showtime: state.fixture && state.fixture.showtime,
     });
   } catch (error) {
     logRunFailed(config, trace, step, error, state);
-    fail(error.message || String(error));
+    failRun(error);
   }
 }

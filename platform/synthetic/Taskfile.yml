@@ -110,7 +110,6 @@ tasks:
     cmds:
       - task: secret-local
       - task: deploy
-      - task: setup-fixture
       - task: status
 
   setup-fixture:
@@ -169,7 +168,6 @@ tasks:
   run:
     desc: 배포된 CronJob에서 수동 Job을 1회 생성하고 로그를 출력합니다.
     cmds:
-      - task: setup-fixture
       - |
         set -eu
         job_name="{{.RELEASE}}-manual-$(date -u +%Y%m%d%H%M%S)"

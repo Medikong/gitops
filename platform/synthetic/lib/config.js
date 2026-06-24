@@ -49,6 +49,7 @@ export function getConfig(overrides = {}) {
   const target = overrides.target || optional('SYNTHETIC_TARGET', scenario.startsWith('internal') ? 'internal' : 'external');
   const runId = optional('SYNTHETIC_RUN_ID', `${Date.now()}-${__VU}-${__ITER}`);
   const requestPrefix = optional('SYNTHETIC_REQUEST_PREFIX', 'synthetic');
+  const concertTitlePrefix = optional('SYNTHETIC_CONCERT_TITLE', 'Medikong Synthetic E2E').trim() || 'Medikong Synthetic E2E';
 
   return {
     scenario,
@@ -63,7 +64,7 @@ export function getConfig(overrides = {}) {
     paymentAmount: positiveInteger('SYNTHETIC_PAYMENT_AMOUNT', 50000),
     maxSeatAttempts: positiveInteger('SYNTHETIC_MAX_SEAT_ATTEMPTS', 3),
     concertId: optional('SYNTHETIC_CONCERT_ID'),
-    concertTitle: optional('SYNTHETIC_CONCERT_TITLE', 'Medikong Synthetic E2E'),
+    concertTitle: `${concertTitlePrefix} ${runId}`,
     fixtureLookaheadDays: positiveInteger('SYNTHETIC_FIXTURE_LOOKAHEAD_DAYS', 7),
     fixtureSeatRows: positiveInteger('SYNTHETIC_FIXTURE_SEAT_ROWS', 5),
     fixtureSeatsPerRow: positiveInteger('SYNTHETIC_FIXTURE_SEATS_PER_ROW', 20),
